@@ -8,3 +8,10 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Secrets — never commit
+.env
+
+# Runtime state
+.chroma/
+kg_store.json

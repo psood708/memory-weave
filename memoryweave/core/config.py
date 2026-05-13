@@ -9,7 +9,8 @@ class Settings(BaseSettings):
 
     langsmith_api_key: str = ""
     langsmith_tracing: bool = False
-    langsmith_project: str = "memoryweave"
+    langsmith_endpoint: str = "https://api.smith.langchain.com"
+    langsmith_project: str = "memory-weave"
 
     # Working memory
     working_memory_max_turns: int = 10

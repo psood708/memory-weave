@@ -186,10 +186,11 @@ OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=qwen3.5:9b          # main conversational LLM
 OLLAMA_SCORER_MODEL=gemma4:e2b   # importance scoring LLM
 
-# LangSmith (optional)
+# LangSmith — traces every agent node automatically via LangGraph
 LANGSMITH_API_KEY=your_key_here
 LANGSMITH_TRACING=true
-LANGSMITH_PROJECT=memoryweave
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+LANGSMITH_PROJECT=memory-weave
 ```
 
 Tunable parameters in `memoryweave/core/config.py`:
@@ -286,6 +287,12 @@ uv run pytest memoryweave/tests/ -v
 
 # Run specific test file
 uv run pytest memoryweave/tests/test_episodic_store.py -v
+
+# KG-specific tests
+uv run pytest memoryweave/tests/test_kg_extraction.py memoryweave/tests/test_kg_graph_ops.py memoryweave/tests/test_kg_persistence.py -v
+
+# End-to-end retrieval
+uv run pytest memoryweave/tests/test_two_phase_retrieval.py memoryweave/tests/test_langgraph_graph.py -v
 ```
 
 ---
@@ -301,13 +308,13 @@ uv run pytest memoryweave/tests/test_episodic_store.py -v
 - [x] CLI test harness with live stats
 - [x] Unit tests for episodic store and working memory
 
-### 🔧 Week 2 — Knowledge Graph Agent (In Progress)
+### ✅ Week 2 — Knowledge Graph Agent (Complete)
 
-- [ ] KG Agent — entity extraction via qwen3.5:9b JSON mode (Pydantic schema)
-- [ ] Graph operations — upsert nodes/edges, BFS traversal, Hebbian reinforcement, decay + pruning
-- [ ] Two-phase retrieval — episodic entities → graph traversal → merged context
-- [ ] Memory Orchestrator (v2) — full three-tier fan-out
-- [ ] LangSmith tracing
+- [x] KG Agent — entity extraction via qwen3.5:9b JSON mode (Pydantic schema)
+- [x] Graph operations — upsert nodes/edges, BFS traversal, Hebbian reinforcement, decay + pruning
+- [x] Two-phase retrieval — episodic entities → graph traversal → merged context
+- [x] Memory Orchestrator (v2) — full three-tier fan-out via LangGraph StateGraph
+- [x] LangSmith tracing (env-var enabled via LangChain)
 
 ### 📋 Week 3 — FastAPI + Next.js UI
 
@@ -346,17 +353,28 @@ proj1/
 │   ├── agents/
 │   │   ├── conversational.py       # User-facing agent
 │   │   ├── episodic_memory.py      # Scoring, storage, retrieval, decay
+│   │   ├── graph.py                # LangGraph StateGraph — wires all agents
+│   │   ├── kg_agent.py             # Entity extraction + KG read/write
 │   │   ├── orchestrator.py         # Fan-out, merge, token budget
 │   │   └── working_memory.py       # Sliding buffer
 │   ├── core/
 │   │   ├── config.py               # Pydantic settings (reads .env)
 │   │   ├── context_budget.py       # Token budget enforcement + formatting
-│   │   └── llm.py                  # Ollama LLM factories
+│   │   ├── llm.py                  # Ollama LLM factories
+│   │   ├── protocols.py            # Runtime-checkable agent protocols
+│   │   └── state.py                # MemoryWeaveState TypedDict
 │   ├── memory/
-│   │   └── episodic_store.py       # ChromaDB wrapper + Episode dataclass
+│   │   ├── episodic_store.py       # ChromaDB wrapper + Episode dataclass
+│   │   └── kg_store.py             # NetworkX DiGraph with JSON persistence
 │   ├── eval/                       # Evaluation framework (Week 3-4)
 │   └── tests/
+│       ├── test_agents.py
 │       ├── test_episodic_store.py
+│       ├── test_kg_extraction.py
+│       ├── test_kg_graph_ops.py
+│       ├── test_kg_persistence.py
+│       ├── test_langgraph_graph.py
+│       ├── test_two_phase_retrieval.py
 │       └── test_working_memory.py
 ├── .chroma/                        # ChromaDB persistence (git-ignored)
 ├── .env.example
