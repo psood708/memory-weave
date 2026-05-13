@@ -1,22 +1,17 @@
-from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from memoryweave.agents.orchestrator import MemoryOrchestrator
-from memoryweave.core.config import settings
+from memoryweave.core.llm import extract_text, get_llm
 
 _BASE_SYSTEM = "You are a helpful, context-aware assistant with access to prior conversation memory."
 
 
 class ConversationalAgent:
-    """User-facing agent that receives pre-built context and generates responses."""
+    """User-facing agent — receives pre-built memory context, generates responses."""
 
     def __init__(self, orchestrator: MemoryOrchestrator):
         self._orchestrator = orchestrator
-        self._llm = ChatAnthropic(
-            model="claude-sonnet-4-6",
-            api_key=settings.anthropic_api_key,
-            max_tokens=1024,
-        )
+        self._llm = get_llm()
 
     def chat(self, user_input: str) -> tuple[str, int]:
         """Returns (response_text, context_token_estimate)."""
@@ -26,16 +21,15 @@ class ConversationalAgent:
         if result.formatted_context:
             system_content += f"\n\n{result.formatted_context}"
 
-        messages = [
+        response = self._llm.invoke([
             SystemMessage(content=system_content),
             HumanMessage(content=user_input),
-        ]
-        response = self._llm.invoke(messages)
-        response_text = response.content
+        ])
+        response_text = extract_text(response.content)
 
-        human_msg = HumanMessage(content=user_input)
-        from langchain_core.messages import AIMessage
-        ai_msg = AIMessage(content=response_text)
-        self._orchestrator.write_turn([human_msg, ai_msg])
+        self._orchestrator.write_turn([
+            HumanMessage(content=user_input),
+            AIMessage(content=response_text),
+        ])
 
         return response_text, result.token_estimate

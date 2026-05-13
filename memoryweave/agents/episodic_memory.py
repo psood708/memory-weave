@@ -1,22 +1,29 @@
+import re
 from datetime import datetime, timezone
 
-from anthropic import Anthropic
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, HumanMessage
 
 from memoryweave.core.config import settings
+from memoryweave.core.llm import extract_text, get_scorer_llm
 from memoryweave.memory.episodic_store import Episode, EpisodicStore
 
 _IMPORTANCE_PROMPT = """\
-You are scoring a conversation turn for long-term memory relevance.
+Score this conversation turn for long-term memory relevance.
 
-Conversation turn:
+Turn:
 {content}
 
-Score this turn from 0.0 to 1.0 based on how likely it is to be useful in future sessions.
-High scores (0.7-1.0): specific facts, decisions, names, preferences, project details, commitments.
-Low scores (0.0-0.3): pleasantries, filler, vague statements, repetition of prior context.
+High (0.7-1.0): specific facts, decisions, names, preferences, project details, commitments.
+Low (0.0-0.3): pleasantries, filler, vague statements, repeated context.
 
-Respond with ONLY a float between 0.0 and 1.0. No explanation."""
+Reply with ONLY a single decimal number between 0.0 and 1.0. Nothing else."""
+
+
+def _parse_score(text: str) -> float:
+    matches = re.findall(r"\b(1\.0+|0\.\d+)\b", text)
+    if matches:
+        return min(1.0, max(0.0, float(matches[0])))
+    return 0.0
 
 
 class EpisodicMemoryAgent:
@@ -25,18 +32,11 @@ class EpisodicMemoryAgent:
     def __init__(self, session_id: str, store: EpisodicStore | None = None):
         self._session_id = session_id
         self._store = store or EpisodicStore()
-        self._client = Anthropic(api_key=settings.anthropic_api_key)
 
     def score_importance(self, content: str) -> float:
-        response = self._client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=10,
-            messages=[{"role": "user", "content": _IMPORTANCE_PROMPT.format(content=content)}],
-        )
-        try:
-            return min(1.0, max(0.0, float(response.content[0].text.strip())))
-        except (ValueError, IndexError):
-            return 0.0
+        llm = get_scorer_llm()
+        response = llm.invoke([HumanMessage(content=_IMPORTANCE_PROMPT.format(content=content))])
+        return _parse_score(extract_text(response.content))
 
     def write(self, messages: list[BaseMessage], entity_ids: list[str] | None = None) -> Episode | None:
         content = "\n".join(

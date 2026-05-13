@@ -2,7 +2,11 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    anthropic_api_key: str = ""
+    # Ollama
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "qwen3.5:9b"
+    ollama_scorer_model: str = "gemma4:e2b"
+
     langsmith_api_key: str = ""
     langsmith_tracing: bool = False
     langsmith_project: str = "memoryweave"
