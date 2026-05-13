@@ -66,3 +66,26 @@ def test_token_budget_context(store):
     )
     total_chars = len(block.working_memory) + len(block.episodes) + len(block.kg_context)
     assert total_chars <= 100 * 4 + len("recent turns")
+
+
+def test_decay_prunes_using_settings_min_importance(tmp_path, monkeypatch):
+    """apply_decay must respect settings.episodic_min_importance, not hard-code 0.05."""
+    from memoryweave.core import config
+    monkeypatch.setattr(config.settings, "episodic_min_importance", 0.5)
+    store = EpisodicStore(collection_name=f"test_{uuid.uuid4().hex}", persist_dir=str(tmp_path))
+    ep = make_episode(store, "Some content", score=0.6, turn=1)
+    store.write(ep)
+    # 0.6 * e^(-0.1 * 3) ≈ 0.44, which is below 0.5 but above old 0.05
+    store.apply_decay(current_turn=4, decay_lambda=0.1)
+    assert store.count() == 0, "episode should be pruned when decayed below min_importance"
+
+
+def test_turn_counter_bootstraps_from_persisted_episodes(tmp_path):
+    """A new EpisodicStore pointed at existing data must init its counter from stored turn numbers."""
+    coll_name = f"test_{uuid.uuid4().hex}"
+    store1 = EpisodicStore(collection_name=coll_name, persist_dir=str(tmp_path))
+    ep = make_episode(store1, "Some content", score=0.8, turn=7)
+    store1.write(ep)
+
+    store2 = EpisodicStore(collection_name=coll_name, persist_dir=str(tmp_path))
+    assert store2.turn_count >= 7, "turn counter must bootstrap from max stored turn_number"

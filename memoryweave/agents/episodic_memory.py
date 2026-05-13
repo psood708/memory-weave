@@ -32,15 +32,16 @@ class EpisodicMemoryAgent:
     def __init__(self, session_id: str, store: EpisodicStore | None = None):
         self._session_id = session_id
         self._store = store or EpisodicStore()
+        self._scorer_llm = get_scorer_llm()
 
     def score_importance(self, content: str) -> float:
-        llm = get_scorer_llm()
-        response = llm.invoke([HumanMessage(content=_IMPORTANCE_PROMPT.format(content=content))])
+        response = self._scorer_llm.invoke([HumanMessage(content=_IMPORTANCE_PROMPT.format(content=content))])
         return _parse_score(extract_text(response.content))
 
     def write(self, messages: list[BaseMessage], entity_ids: list[str] | None = None) -> Episode | None:
         content = "\n".join(
-            f"{'User' if m.type == 'human' else 'Assistant'}: {m.content}" for m in messages
+            f"{'User' if m.type == 'human' else 'Assistant'}: {extract_text(m.content)}"
+            for m in messages
         )
         turn = self._store.increment_turn()
         score = self.score_importance(content)
@@ -63,7 +64,10 @@ class EpisodicMemoryAgent:
     def retrieve(self, query: str) -> list[Episode]:
         episodes = self._store.retrieve(query, top_k=settings.episodic_top_k)
         self._store.apply_decay(self._store.turn_count, settings.episodic_decay_lambda)
-        return episodes
+        return [ep for ep in episodes if ep.importance_score >= settings.episodic_min_importance]
+
+    def update_entity_links(self, episode_id: str, entity_ids: list[str]) -> None:
+        self._store.update_entity_links(episode_id, entity_ids)
 
     def format_for_context(self, episodes: list[Episode]) -> str:
         if not episodes:
@@ -73,7 +77,3 @@ class EpisodicMemoryAgent:
             ts = ep.timestamp.strftime("%Y-%m-%d")
             lines.append(f"[{ts}, importance={ep.importance_score:.2f}] {ep.content}")
         return "\n\n".join(lines)
-
-    @property
-    def store(self) -> EpisodicStore:
-        return self._store

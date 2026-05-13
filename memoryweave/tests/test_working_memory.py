@@ -27,3 +27,19 @@ def test_clear():
     agent.clear()
     assert agent.turn_count == 0
     assert agent.format_for_context() == ""
+
+
+def test_messages_added_tracks_beyond_buffer_capacity():
+    agent = WorkingMemoryAgent(max_turns=3)
+    for i in range(10):
+        agent.add(HumanMessage(content=f"msg {i}"))
+    assert agent.messages_added == 10
+    assert len(agent.get()) == 3  # buffer still capped
+
+
+def test_messages_added_resets_on_clear():
+    agent = WorkingMemoryAgent(max_turns=5)
+    for i in range(5):
+        agent.add(HumanMessage(content=f"msg {i}"))
+    agent.clear()
+    assert agent.messages_added == 0

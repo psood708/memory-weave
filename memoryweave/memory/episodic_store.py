@@ -43,6 +43,8 @@ class EpisodicStore:
     """ChromaDB-backed episodic memory store with importance scoring and decay."""
 
     def __init__(self, collection_name: str = "episodes", persist_dir: str = ".chroma"):
+        from memoryweave.core.config import settings as _settings
+        self._settings = _settings
         self._client = chromadb.PersistentClient(
             path=persist_dir,
             settings=ChromaSettings(anonymized_telemetry=False),
@@ -51,7 +53,15 @@ class EpisodicStore:
             name=collection_name,
             metadata={"hnsw:space": "cosine"},
         )
-        self._turn_counter: int = 0
+        self._turn_counter: int = self._bootstrap_turn_counter()
+
+    def _bootstrap_turn_counter(self) -> int:
+        if self._collection.count() == 0:
+            return 0
+        items = self._collection.get(include=["metadatas"])
+        if not items["metadatas"]:
+            return 0
+        return max(int(m.get("turn_number", 0)) for m in items["metadatas"])
 
     def write(self, episode: Episode) -> None:
         self._collection.upsert(
@@ -88,7 +98,7 @@ class EpisodicStore:
         ):
             delta = current_turn - int(meta["turn_number"])
             decayed = float(meta["importance_score"]) * math.exp(-decay_lambda * delta)
-            if decayed < 0.05:
+            if decayed < self._settings.episodic_min_importance:
                 ids_to_delete.append(id_)
             else:
                 meta["importance_score"] = decayed

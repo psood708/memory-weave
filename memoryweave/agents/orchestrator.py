@@ -6,6 +6,8 @@ from memoryweave.agents.episodic_memory import EpisodicMemoryAgent
 from memoryweave.agents.working_memory import WorkingMemoryAgent
 from memoryweave.core.config import settings
 from memoryweave.core.context_budget import ContextBlock, build_context_block, format_context_block
+from memoryweave.core.llm import extract_text
+from memoryweave.core.protocols import KGAgentProtocol
 from memoryweave.memory.episodic_store import Episode
 
 
@@ -25,7 +27,7 @@ class MemoryOrchestrator:
         self,
         working: WorkingMemoryAgent,
         episodic: EpisodicMemoryAgent,
-        kg_agent=None,  # injected in Week 2
+        kg_agent: KGAgentProtocol | None = None,
     ):
         self._working = working
         self._episodic = episodic
@@ -56,7 +58,7 @@ class MemoryOrchestrator:
             context_block=block,
             formatted_context=formatted,
             episodes_used=episodes,
-            working_turns=self._working.turn_count,
+            working_turns=self._working.messages_added,
             token_estimate=token_estimate,
         )
 
@@ -69,9 +71,10 @@ class MemoryOrchestrator:
         episode = self._episodic.write(messages)
 
         if episode and self._kg:
+            content = "\n".join(extract_text(m.content) for m in messages)
             entity_ids = self._kg.extract_and_update(
-                content="\n".join(m.content for m in messages),
+                content=content,
                 episode_id=episode.id,
             )
             if entity_ids:
-                self._episodic.store.update_entity_links(episode.id, entity_ids)
+                self._episodic.update_entity_links(episode.id, entity_ids)
