@@ -21,6 +21,16 @@ def get_scorer_llm() -> ChatOllama:
     )
 
 
+def get_extraction_llm() -> ChatOllama:
+    """JSON-mode LLM for structured entity extraction — temp=0."""
+    return ChatOllama(
+        model=settings.ollama_model,
+        base_url=settings.ollama_base_url,
+        temperature=0,
+        format="json",
+    )
+
+
 def extract_text(content: str | list) -> str:
     """Safely extract plain string from AIMessage.content (str | list)."""
     if isinstance(content, str):
