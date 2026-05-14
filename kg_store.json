@@ -1,1 +1,1 @@
-{"directed": true, "multigraph": false, "graph": {}, "nodes": [], "edges": []}
+{"directed": true, "multigraph": false, "graph": {}, "nodes": [{"type": "Person", "description": "The user introducing themselves", "id": "Parth"}, {"type": "Project", "description": "The system or project the user is developing", "id": "Memory Weave"}], "edges": [{"rel_type": "works_on", "weight": 1.0, "source": "Parth", "target": "Memory Weave"}]}

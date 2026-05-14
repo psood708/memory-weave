@@ -8,25 +8,20 @@ def get_llm(temperature: float = 0.7) -> ChatOllama:
         model=settings.ollama_model,
         base_url=settings.ollama_base_url,
         temperature=temperature,
-    )
-
-
-def get_scorer_llm() -> ChatOllama:
-    """Deterministic LLM for importance scoring — temp=0."""
-    return ChatOllama(
-        model=settings.ollama_scorer_model,
-        base_url=settings.ollama_base_url,
-        temperature=0,
+        num_gpu=99,
+        num_ctx=4096,
     )
 
 
 def get_extraction_llm() -> ChatOllama:
-    """JSON-mode LLM for structured entity extraction — temp=0."""
+    """JSON-mode LLM for structured entity extraction and importance scoring — temp=0."""
     return ChatOllama(
         model=settings.ollama_model,
         base_url=settings.ollama_base_url,
         temperature=0,
         format="json",
+        num_gpu=99,
+        num_ctx=2048,
     )
 
 

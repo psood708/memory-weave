@@ -7,14 +7,15 @@ from memoryweave.core.config import settings
 from memoryweave.core.llm import extract_text, get_extraction_llm
 from memoryweave.memory.kg_store import KnowledgeGraphStore
 
-_EXTRACTION_PROMPT = """\
-Extract entities and relationships from this conversation turn.
+_FUSED_PROMPT = """\
+Analyze this conversation turn for memory storage.
 
 Turn:
 {text}
 
-Return ONLY valid JSON matching this exact schema:
+Return ONLY valid JSON:
 {{
+  "importance_score": <float 0.0-1.0>,
   "entities": [
     {{"name": "string", "type": "Person|Project|Preference|Fact|Organization", "description": "string"}}
   ],
@@ -23,13 +24,17 @@ Return ONLY valid JSON matching this exact schema:
   ]
 }}
 
-Rules:
-- Only use entity types from this list: Person, Project, Preference, Fact, Organization
-- rel_type must be a short verb phrase: works_on, prefers, knows, part_of, uses, has, related_to
-- weight is always 1.0 for new relationships
-- source and target must be names of entities listed above
-- If no entities are found, return {{"entities": [], "relationships": []}}
-- Return ONLY the JSON object, no explanation or markdown"""
+importance_score rules:
+- High (0.7-1.0): specific facts, decisions, names, preferences, project details, commitments
+- Low (0.0-0.3): pleasantries, filler, vague statements, repeated context
+
+entity/relationship rules:
+- Only types: Person, Project, Preference, Fact, Organization
+- rel_type: works_on, prefers, knows, part_of, uses, has, related_to
+- source and target must be names from the entities list above
+- If no entities found, use empty lists
+
+Return ONLY the JSON object."""
 
 
 class Entity(BaseModel):
@@ -50,6 +55,12 @@ class ExtractionResult(BaseModel):
     relationships: list[Relationship]
 
 
+class FusedResult(BaseModel):
+    importance_score: float
+    entities: list[Entity]
+    relationships: list[Relationship]
+
+
 class KGAgent:
     """Extracts entities from conversation turns and manages KG read/write paths."""
 
@@ -57,17 +68,18 @@ class KGAgent:
         self._store = store or KnowledgeGraphStore()
         self._extraction_llm = get_extraction_llm()
 
-    def _extract(self, text: str) -> ExtractionResult:
+    def fused_extract(self, text: str) -> FusedResult:
+        """Single LLM call: returns importance score + entities + relationships."""
         if not text.strip():
-            return ExtractionResult(entities=[], relationships=[])
+            return FusedResult(importance_score=0.0, entities=[], relationships=[])
         try:
             response = self._extraction_llm.invoke(
-                [HumanMessage(content=_EXTRACTION_PROMPT.format(text=text))]
+                [HumanMessage(content=_FUSED_PROMPT.format(text=text))]
             )
             raw = extract_text(response.content)
-            return ExtractionResult.model_validate_json(raw)
+            return FusedResult.model_validate_json(raw)
         except Exception:
-            return ExtractionResult(entities=[], relationships=[])
+            return FusedResult(importance_score=0.0, entities=[], relationships=[])
 
     def find_seed_nodes(self, text: str) -> list[str]:
         """Return graph node names that appear (case-insensitive) in text."""
@@ -80,17 +92,16 @@ class KGAgent:
         self._store._maybe_maintain()
         return self._store.format_context(nodes)
 
-    def extract_and_update(self, content: str, episode_id: str) -> list[str]:
-        """Write path: extract entities from content, upsert graph, persist, return entity names."""
-        extraction = self._extract(content)
-        for entity in extraction.entities:
+    def update_graph(self, fused: FusedResult, episode_id: str) -> list[str]:
+        """Write path: upsert graph from a FusedResult, persist, return entity names."""
+        for entity in fused.entities:
             self._store.upsert_node(entity.name, entity.type, entity.description)
-        for rel in extraction.relationships:
+        for rel in fused.relationships:
             if (self._store._graph.has_node(rel.source)
                     and self._store._graph.has_node(rel.target)):
                 self._store.upsert_edge(rel.source, rel.target, rel.rel_type, rel.weight)
         self._store.save()
-        return [e.name for e in extraction.entities]
+        return [e.name for e in fused.entities]
 
     @property
     def store(self) -> KnowledgeGraphStore:

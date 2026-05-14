@@ -63,9 +63,10 @@ def build_graph(session_id: str | None = None):
         ]
         for msg in msgs:
             working.add(msg)
-        episode = episodic.write(msgs)
         turn_content = f"{state['user_input']}\n{state['response']}"
-        entity_names = kg.extract_and_update(turn_content, episode_id=episode.id if episode else "")
+        fused = kg.fused_extract(turn_content)
+        episode = episodic.write(msgs, importance_score=fused.importance_score)
+        entity_names = kg.update_graph(fused, episode_id=episode.id if episode else "")
         if episode and entity_names:
             episodic.update_entity_links(episode.id, entity_names)
         return {}

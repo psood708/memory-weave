@@ -1,58 +1,33 @@
-import re
 from datetime import datetime, timezone
 
-from langchain_core.messages import BaseMessage, HumanMessage
+from langchain_core.messages import BaseMessage
 
 from memoryweave.core.config import settings
-from memoryweave.core.llm import extract_text, get_scorer_llm
+from memoryweave.core.llm import extract_text
 from memoryweave.memory.episodic_store import Episode, EpisodicStore
-
-_IMPORTANCE_PROMPT = """\
-Score this conversation turn for long-term memory relevance.
-
-Turn:
-{content}
-
-High (0.7-1.0): specific facts, decisions, names, preferences, project details, commitments.
-Low (0.0-0.3): pleasantries, filler, vague statements, repeated context.
-
-Reply with ONLY a single decimal number between 0.0 and 1.0. Nothing else."""
-
-
-def _parse_score(text: str) -> float:
-    matches = re.findall(r"\b(1\.0+|0\.\d+)\b", text)
-    if matches:
-        return min(1.0, max(0.0, float(matches[0])))
-    return 0.0
 
 
 class EpisodicMemoryAgent:
-    """Scores, stores, retrieves, and decays episodic memories."""
+    """Stores, retrieves, and decays episodic memories."""
 
     def __init__(self, session_id: str, store: EpisodicStore | None = None):
         self._session_id = session_id
         self._store = store or EpisodicStore()
-        self._scorer_llm = get_scorer_llm()
 
-    def score_importance(self, content: str) -> float:
-        response = self._scorer_llm.invoke([HumanMessage(content=_IMPORTANCE_PROMPT.format(content=content))])
-        return _parse_score(extract_text(response.content))
-
-    def write(self, messages: list[BaseMessage], entity_ids: list[str] | None = None) -> Episode | None:
+    def write(self, messages: list[BaseMessage], importance_score: float, entity_ids: list[str] | None = None) -> Episode | None:
         content = "\n".join(
             f"{'User' if m.type == 'human' else 'Assistant'}: {extract_text(m.content)}"
             for m in messages
         )
         turn = self._store.increment_turn()
-        score = self.score_importance(content)
 
-        if score < settings.episodic_importance_threshold:
+        if importance_score < settings.episodic_importance_threshold:
             return None
 
         episode = Episode(
             id=EpisodicStore.new_id(),
             content=content,
-            importance_score=score,
+            importance_score=importance_score,
             timestamp=datetime.now(timezone.utc),
             session_id=self._session_id,
             turn_number=turn,
