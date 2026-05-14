@@ -14,6 +14,7 @@ class KnowledgeGraphStore:
         _base = os.path.basename(persist_path)
         self._tmp_path = os.path.join(_dir, f".{_base}.tmp")
         self._graph: nx.DiGraph = nx.DiGraph()
+        self._call_count: int = 0
         self.load()
 
     # ── Write ops ────────────────────────────────────────────────────────────
@@ -105,6 +106,13 @@ class KnowledgeGraphStore:
         self._graph.remove_edges_from(weak)
         orphans = [n for n in list(self._graph.nodes) if self._graph.degree(n) == 0]
         self._graph.remove_nodes_from(orphans)
+
+    def _maybe_maintain(self) -> None:
+        from memoryweave.core.config import settings
+        self._call_count += 1
+        if self._call_count % settings.kg_decay_interval == 0:
+            self.decay_all()
+            self.prune()
 
     # ── Persistence ───────────────────────────────────────────────────────────
 

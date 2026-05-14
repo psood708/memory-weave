@@ -63,7 +63,7 @@ class EpisodicMemoryAgent:
 
     def retrieve(self, query: str) -> list[Episode]:
         episodes = self._store.retrieve(query, top_k=settings.episodic_top_k)
-        self._store.apply_decay(self._store.turn_count, settings.episodic_decay_lambda)
+        self._store._maybe_decay(settings.episodic_decay_lambda)
         return [ep for ep in episodes if ep.importance_score >= settings.episodic_min_importance]
 
     def update_entity_links(self, episode_id: str, entity_ids: list[str]) -> None:

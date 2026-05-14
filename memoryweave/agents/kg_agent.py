@@ -77,8 +77,7 @@ class KGAgent:
     def retrieve_context(self, entity_ids: list[str]) -> str:
         """Read path: traverse graph from entity_ids, return formatted context string."""
         nodes = self._store.traverse(entity_ids, max_hops=settings.kg_traversal_hops)
-        self._store.decay_all()
-        self._store.prune()
+        self._store._maybe_maintain()
         return self._store.format_context(nodes)
 
     def extract_and_update(self, content: str, episode_id: str) -> list[str]:

@@ -113,6 +113,10 @@ class EpisodicStore:
                 ids=ids_to_update, documents=docs_to_update, metadatas=metas_to_update
             )
 
+    def _maybe_decay(self, decay_lambda: float) -> None:
+        if self._turn_counter % self._settings.episodic_decay_interval == 0:
+            self.apply_decay(self._turn_counter, decay_lambda)
+
     def update_entity_links(self, episode_id: str, entity_ids: list[str]) -> None:
         results = self._collection.get(ids=[episode_id], include=["documents", "metadatas"])
         if not results["ids"]:

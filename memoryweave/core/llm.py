@@ -12,12 +12,11 @@ def get_llm(temperature: float = 0.7) -> ChatOllama:
 
 
 def get_scorer_llm() -> ChatOllama:
-    """Deterministic LLM for importance scoring — temp=0, short output."""
+    """Deterministic LLM for importance scoring — temp=0."""
     return ChatOllama(
         model=settings.ollama_scorer_model,
         base_url=settings.ollama_base_url,
         temperature=0,
-        num_predict=16,
     )
 
 

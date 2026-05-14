@@ -20,12 +20,14 @@ class Settings(BaseSettings):
     episodic_decay_lambda: float = 0.05
     episodic_top_k: int = 5
     episodic_min_importance: float = 0.05
+    episodic_decay_interval: int = 5
 
     # Knowledge graph
     kg_reinforcement_factor: float = 1.2
     kg_decay_factor: float = 0.95
     kg_min_edge_weight: float = 0.1
     kg_traversal_hops: int = 2
+    kg_decay_interval: int = 5
 
     # Orchestrator
     context_token_budget: int = 2000
