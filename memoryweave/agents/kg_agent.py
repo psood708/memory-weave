@@ -69,6 +69,11 @@ class KGAgent:
         except Exception:
             return ExtractionResult(entities=[], relationships=[])
 
+    def find_seed_nodes(self, text: str) -> list[str]:
+        """Return graph node names that appear (case-insensitive) in text."""
+        text_lower = text.lower()
+        return [n for n in self._store._graph.nodes if n.lower() in text_lower]
+
     def retrieve_context(self, entity_ids: list[str]) -> str:
         """Read path: traverse graph from entity_ids, return formatted context string."""
         nodes = self._store.traverse(entity_ids, max_hops=settings.kg_traversal_hops)

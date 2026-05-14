@@ -33,7 +33,8 @@ def build_graph(session_id: str | None = None):
         }
 
     def kg_node(state: MemoryWeaveState) -> dict:
-        return {"kg_context": kg.retrieve_context([state["user_input"]])}
+        seeds = kg.find_seed_nodes(state["user_input"])
+        return {"kg_context": kg.retrieve_context(seeds)}
 
     def merge_node(state: MemoryWeaveState) -> dict:
         block = build_context_block(
@@ -63,11 +64,10 @@ def build_graph(session_id: str | None = None):
         for msg in msgs:
             working.add(msg)
         episode = episodic.write(msgs)
-        if episode:
-            turn_content = f"{state['user_input']}\n{state['response']}"
-            entity_names = kg.extract_and_update(turn_content, episode_id=episode.id)
-            if entity_names:
-                episodic.update_entity_links(episode.id, entity_names)
+        turn_content = f"{state['user_input']}\n{state['response']}"
+        entity_names = kg.extract_and_update(turn_content, episode_id=episode.id if episode else "")
+        if episode and entity_names:
+            episodic.update_entity_links(episode.id, entity_names)
         return {}
 
     builder = StateGraph(MemoryWeaveState)

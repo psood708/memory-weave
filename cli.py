@@ -29,9 +29,17 @@ def _print_stats(last_tokens: int) -> None:
     if os.path.exists("kg_store.json"):
         with open("kg_store.json") as f:
             kg = json.load(f)
-        nodes = len(kg.get("nodes", []))
-        links = len(kg.get("links", []))
-        print(f"        KG nodes: {nodes} | KG edges: {links}")
+        nodes = kg.get("nodes", [])
+        links = kg.get("links", [])
+        print(f"        KG nodes: {len(nodes)} | KG edges: {len(links)}")
+        if nodes:
+            print("        Nodes:")
+            for n in nodes:
+                print(f"          [{n.get('type', '?')}] {n['id']} — {n.get('description', '')[:60]}")
+        if links:
+            print("        Edges:")
+            for e in links:
+                print(f"          {e['source']} --{e.get('rel_type', '?')}--> {e['target']} (w={e.get('weight', 0):.2f})")
     else:
         print("        KG: no graph persisted yet")
     print()
