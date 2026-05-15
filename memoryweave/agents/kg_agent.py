@@ -17,7 +17,7 @@ Return ONLY valid JSON:
 {{
   "importance_score": <float 0.0-1.0>,
   "entities": [
-    {{"name": "string", "type": "Person|Project|Preference|Fact|Organization", "description": "string"}}
+    {{"name": "string", "type": "Person|Project|Preference|Fact|Organization|Event", "description": "string"}}
   ],
   "relationships": [
     {{"source": "entity name", "target": "entity name", "rel_type": "string", "weight": 1.0}}
@@ -29,8 +29,9 @@ importance_score rules:
 - Low (0.0-0.3): pleasantries, filler, vague statements, repeated context
 
 entity/relationship rules:
-- Only types: Person, Project, Preference, Fact, Organization
-- rel_type: works_on, prefers, knows, part_of, uses, has, related_to
+- Only types: Person, Project, Preference, Fact, Organization, Event
+- Event: use for meetings, deadlines, launches, demos, decisions, milestones, or any time-bound occurrence
+- rel_type: works_on, prefers, knows, part_of, uses, has, related_to, scheduled_for, decided_at, attended
 - source and target must be names from the entities list above
 - If no entities found, use empty lists
 
@@ -39,7 +40,7 @@ Return ONLY the JSON object."""
 
 class Entity(BaseModel):
     name: str
-    type: Literal["Person", "Project", "Preference", "Fact", "Organization"]
+    type: Literal["Person", "Project", "Preference", "Fact", "Organization", "Event"]
     description: str
 
 
@@ -64,9 +65,9 @@ class FusedResult(BaseModel):
 class KGAgent:
     """Extracts entities from conversation turns and manages KG read/write paths."""
 
-    def __init__(self, store: KnowledgeGraphStore | None = None):
+    def __init__(self, store: KnowledgeGraphStore | None = None, provider: str | None = None):
         self._store = store or KnowledgeGraphStore()
-        self._extraction_llm = get_extraction_llm()
+        self._extraction_llm = get_extraction_llm(provider=provider)
 
     def fused_extract(self, text: str) -> FusedResult:
         """Single LLM call: returns importance score + entities + relationships."""

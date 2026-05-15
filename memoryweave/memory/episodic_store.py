@@ -132,6 +132,13 @@ class EpisodicStore:
     def count(self) -> int:
         return self._collection.count()
 
+    def clear(self) -> None:
+        """Delete all episodes and reset the turn counter."""
+        ids = self._collection.get()["ids"]
+        if ids:
+            self._collection.delete(ids=ids)
+        self._turn_counter = 0
+
     def increment_turn(self) -> int:
         self._turn_counter += 1
         return self._turn_counter

@@ -3,26 +3,60 @@ from langchain_ollama import ChatOllama
 from memoryweave.core.config import settings
 
 
-def get_llm(temperature: float = 0.7) -> ChatOllama:
+def get_llm(temperature: float = 0.7, provider: str | None = None):
+    p = provider or settings.llm_provider
+    if p == "huggingface":
+        return _hf_llm(temperature)
     return ChatOllama(
         model=settings.ollama_model,
         base_url=settings.ollama_base_url,
         temperature=temperature,
         num_gpu=99,
         num_ctx=4096,
+        num_batch=512,
+        repeat_penalty=1.0,
     )
 
 
-def get_extraction_llm() -> ChatOllama:
-    """JSON-mode LLM for structured entity extraction and importance scoring — temp=0."""
+def get_extraction_llm(provider: str | None = None):
+    """JSON-mode LLM for entity extraction and importance scoring."""
+    p = provider or settings.llm_provider
+    if p == "huggingface":
+        return _hf_extraction_llm()
     return ChatOllama(
         model=settings.ollama_model,
         base_url=settings.ollama_base_url,
         temperature=0,
         format="json",
         num_gpu=99,
-        num_ctx=2048,
+        num_ctx=1024,
+        num_batch=512,
+        repeat_penalty=1.0,
     )
+
+
+def _hf_llm(temperature: float = 0.7):
+    from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
+    endpoint = HuggingFaceEndpoint(
+        repo_id=settings.hf_model,
+        huggingfacehub_api_token=settings.hf_api_key or None,
+        temperature=temperature,
+        max_new_tokens=512,
+        task="text-generation",
+    )
+    return ChatHuggingFace(llm=endpoint)
+
+
+def _hf_extraction_llm():
+    from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
+    endpoint = HuggingFaceEndpoint(
+        repo_id=settings.hf_extraction_model,
+        huggingfacehub_api_token=settings.hf_api_key or None,
+        temperature=0,
+        max_new_tokens=512,
+        task="text-generation",
+    )
+    return ChatHuggingFace(llm=endpoint)
 
 
 def extract_text(content: str | list) -> str:

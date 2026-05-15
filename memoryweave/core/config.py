@@ -31,6 +31,14 @@ class Settings(BaseSettings):
     # Orchestrator
     context_token_budget: int = 2000
 
+    # LLM provider
+    llm_provider: str = "ollama"          # default; overridden per-request via API
+
+    # HuggingFace (used when provider = "huggingface")
+    hf_model: str = "Qwen/Qwen2.5-7B-Instruct"
+    hf_extraction_model: str = "Qwen/Qwen2.5-7B-Instruct"
+    hf_api_key: str = ""
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

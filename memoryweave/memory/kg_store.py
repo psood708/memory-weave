@@ -130,6 +130,13 @@ class KnowledgeGraphStore:
         else:
             self._graph = nx.DiGraph()
 
+    def clear(self) -> None:
+        """Wipe the in-memory graph and delete the persisted JSON file."""
+        self._graph = nx.DiGraph()
+        for path in (self._path, self._tmp_path):
+            if os.path.exists(path):
+                os.remove(path)
+
     # ── Properties ────────────────────────────────────────────────────────────
 
     @property
