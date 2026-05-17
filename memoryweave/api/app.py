@@ -137,8 +137,9 @@ async def chat_stream(req: ChatRequest):
         )
         yield _sse("done", done_payload.model_dump())
 
-        # Fire memory writes in background — user already has the response.
-        asyncio.create_task(session.write_turn_async(req.message, response_text))
+        # Write memory, then signal the frontend to refresh panels.
+        await session.write_turn_async(req.message, response_text)
+        yield _sse("memory_updated", {})
 
     return StreamingResponse(
         generate(),

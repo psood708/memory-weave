@@ -192,13 +192,16 @@ export default function App(props: { initialTab?: Tab }) {
         setAgentActive(AGENT_STEPS.length);
         setConv(c => c.map((m, i) => i === c.length - 1 ? { ...m, streaming: false, text: accText, meta, context } : m));
         setBudget(b => ({ ...b, used: meta.tokens }));
-        // Show toasts
-        setTimeout(() => pushToast({ tier: 'episodic', text: `✦ Episodic memory updated`, score: meta.episodes > 0 ? 0.8 : 0.5 }), 200);
-        if (context?.nodes?.length > 0) {
-          setTimeout(() => pushToast({ tier: 'kg', text: '✦ Graph updated' }), 1100);
-        }
-        // Refresh memory state
-        fetchMemoryState(sessionId, provider).then(setMemoryState).catch(() => {});
+      },
+      onMemoryUpdated: () => {
+        // Fires after write_turn_async completes — memory panels are now current.
+        fetchMemoryState(sessionId, provider).then(ms => {
+          setMemoryState(ms);
+          pushToast({ tier: 'episodic', text: `✦ Episodic memory updated`, score: 0.8 });
+          if (ms.entities.length > 0) {
+            pushToast({ tier: 'kg', text: `✦ Graph updated · ${ms.entities.length} nodes` });
+          }
+        }).catch(() => {});
       },
       onError: (err) => {
         setConv(c => c.map((m, i) => i === c.length - 1 ? { ...m, streaming: false, text: `Error: ${err.message}` } : m));
@@ -226,6 +229,7 @@ export default function App(props: { initialTab?: Tab }) {
                 turns={memoryState?.working_turns ?? WORKING_TURNS}
                 episodes={memoryState?.episodes ?? EPISODES}
                 entities={memoryState?.entities ?? ENTITIES}
+                edges={memoryState?.edges ?? EDGES}
                 hoveredEntity={hoveredEntity}
                 onEpisode={onEpisodeClick}
                 onEntity={onEntityClick}

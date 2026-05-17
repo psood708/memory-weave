@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { Icon } from './Icon';
-import type { Entity, Episode, WorkingTurn } from '@/lib/data';
+import type { Edge, Entity, Episode, WorkingTurn } from '@/lib/data';
 
 interface TierHeadProps {
   swatch: 'working' | 'episodic' | 'kg';
@@ -36,7 +36,7 @@ function WorkingTier({ turns, open, onToggle }: { turns: WorkingTurn[]; open: bo
       <TierHead
         swatch="working" label="Working Memory" count={`${turns.length} turns`}
         open={open} onToggle={onToggle}
-        meta={[{ k: 'tokens', v: '312' }, { k: 'window', v: '8 turns' }]}
+        meta={turns.length > 0 ? [{ k: 'in buffer', v: String(turns.length) }] : undefined}
       />
       <div className="tier-body">
         {turns.slice(-6).map((t, i) => (
@@ -64,9 +64,9 @@ function EpisodicTier({ episodes, open, onToggle, onEpisode, hoveredEntity, prun
   return (
     <div className={`tier ${open ? '' : 'collapsed'}`}>
       <TierHead
-        swatch="episodic" label="Episodic Memory" count={`top ${episodes.length}`}
+        swatch="episodic" label="Episodic Memory" count={`${episodes.length} stored`}
         open={open} onToggle={onToggle}
-        meta={[{ k: 'retrieved', v: '3' }, { k: 'tokens', v: '416' }, { k: 'in store', v: '8,421' }]}
+        meta={episodes.length > 0 ? [{ k: 'episodes', v: String(episodes.length) }] : undefined}
       />
       <div className="tier-body">
         {episodes.map(ep => {
@@ -104,19 +104,25 @@ function EpisodicTier({ episodes, open, onToggle, onEpisode, hoveredEntity, prun
 
 interface KGTierProps {
   entities: Entity[];
+  edges: Edge[];
   open: boolean;
   onToggle: () => void;
   onEntity: (en: Entity) => void;
   onEntityHover: (name: string | null) => void;
 }
 
-function KGTier({ entities, open, onToggle, onEntity, onEntityHover }: KGTierProps) {
+function KGTier({ entities, edges, open, onToggle, onEntity, onEntityHover }: KGTierProps) {
+  const avgW = edges.length > 0
+    ? (edges.reduce((s, e) => s + e.w, 0) / edges.length).toFixed(2)
+    : null;
   return (
     <div className={`tier ${open ? '' : 'collapsed'}`}>
       <TierHead
         swatch="kg" label="Knowledge Graph" count={`${entities.length} nodes`}
         open={open} onToggle={onToggle}
-        meta={[{ k: 'edges', v: '23' }, { k: 'tokens', v: '119' }, { k: 'avg w', v: '0.61' }]}
+        meta={entities.length > 0
+          ? [{ k: 'edges', v: String(edges.length) }, ...(avgW ? [{ k: 'avg w', v: avgW }] : [])]
+          : undefined}
       />
       <div className="tier-body">
         {[...entities].sort((a, b) => b.weight - a.weight).map(en => (
@@ -140,6 +146,7 @@ export interface MemoryPanelProps {
   turns: WorkingTurn[];
   episodes: Episode[];
   entities: Entity[];
+  edges: Edge[];
   hoveredEntity: string | null;
   pruning: string | null;
   entering: string | null;
@@ -156,6 +163,9 @@ export default function MemoryPanel(props: MemoryPanelProps) {
   const [open, setOpen] = useState({ working: true, episodic: true, kg: true });
   const toggle = (k: keyof typeof open) => setOpen(o => ({ ...o, [k]: !o[k] }));
   const q = (props.query || '').trim().toLowerCase();
+  const filteredEdges = q
+    ? props.edges.filter(e => props.entities.find(en => en.id === e.s || en.id === e.t))
+    : props.edges;
 
   const matches = (s: string) => !q || s.toLowerCase().includes(q);
   const filteredEpisodes = q
@@ -208,6 +218,7 @@ export default function MemoryPanel(props: MemoryPanelProps) {
         />
         <KGTier
           entities={filteredEntities}
+          edges={filteredEdges}
           open={open.kg}
           onToggle={() => toggle('kg')}
           onEntity={props.onEntity}

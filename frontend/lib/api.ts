@@ -52,6 +52,7 @@ export function streamChat(
     onAgentStep: (step: string, status: 'active' | 'done') => void;
     onToken: (text: string) => void;
     onDone: (meta: { episodes: number; hops: number; tokens: number; latency: number }, context: any) => void;
+    onMemoryUpdated: () => void;
     onError: (err: Error) => void;
   }
 ): () => void {
@@ -93,6 +94,8 @@ export function streamChat(
                 callbacks.onToken(data.text);
               } else if (eventType === 'done') {
                 callbacks.onDone(data.meta, data.context);
+              } else if (eventType === 'memory_updated') {
+                callbacks.onMemoryUpdated();
               }
             } catch {}
             eventType = '';
