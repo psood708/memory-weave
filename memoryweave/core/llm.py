@@ -29,7 +29,7 @@ def get_extraction_llm(provider: str | None = None):
         temperature=0,
         format="json",
         num_gpu=99,
-        num_ctx=1024,
+        num_ctx=4096,
         num_batch=512,
         repeat_penalty=1.0,
     )

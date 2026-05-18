@@ -23,17 +23,24 @@ interface SimLink extends Edge {
 function useForceLayout(nodes: Entity[], edges: Edge[], width: number, height: number) {
   const nodesRef = useRef<SimNode[] | null>(null);
   const linksRef = useRef<SimLink[] | null>(null);
+  const prevKeyRef = useRef('');
   const [, tick] = useState(0);
 
-  if (!nodesRef.current || nodesRef.current.length !== nodes.length) {
+  const nodeKey = nodes.map(n => n.id).sort().join(',');
+
+  if (!nodesRef.current || prevKeyRef.current !== nodeKey) {
+    const prevNodes = nodesRef.current;
+    prevKeyRef.current = nodeKey;
     nodesRef.current = nodes.map((n, i) => {
+      const existing = prevNodes?.find(sn => sn.id === n.id);
       const angle = (i / Math.max(nodes.length, 1)) * Math.PI * 2;
       const r = Math.min(90 + nodes.length * 4, 160);
       return {
         ...n,
-        x: width / 2 + Math.cos(angle) * r,
-        y: height / 2 + Math.sin(angle) * r,
-        vx: 0, vy: 0,
+        x: existing?.x ?? (width / 2 + Math.cos(angle) * r),
+        y: existing?.y ?? (height / 2 + Math.sin(angle) * r),
+        vx: existing?.vx ?? 0,
+        vy: existing?.vy ?? 0,
         radius: 10 + n.degree * 1.6,
       };
     });
@@ -109,7 +116,7 @@ function useForceLayout(nodes: Entity[], edges: Edge[], width: number, height: n
 
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [width, height, nodes.length]);
+  }, [width, height, nodeKey]);
 
   return { nodes: nodesRef.current!, links: linksRef.current! };
 }

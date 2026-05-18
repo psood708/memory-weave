@@ -1,3 +1,5 @@
+import json
+import re
 from typing import Literal
 
 from langchain_core.messages import HumanMessage
@@ -6,6 +8,13 @@ from pydantic import BaseModel
 from memoryweave.core.config import settings
 from memoryweave.core.llm import extract_text, get_extraction_llm
 from memoryweave.memory.kg_store import KnowledgeGraphStore
+
+
+def _parse_llm_json(raw: str) -> dict:
+    """Strip Qwen3 <think> blocks and extract the JSON object from LLM output."""
+    text = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL).strip()
+    match = re.search(r'\{.*\}', text, re.DOTALL)
+    return json.loads(match.group(0) if match else text)
 
 _FUSED_PROMPT = """\
 Analyze this conversation turn for memory storage.
@@ -78,8 +87,10 @@ class KGAgent:
                 [HumanMessage(content=_FUSED_PROMPT.format(text=text))]
             )
             raw = extract_text(response.content)
-            return FusedResult.model_validate_json(raw)
-        except Exception:
+            data = _parse_llm_json(raw)
+            return FusedResult.model_validate(data)
+        except Exception as e:
+            print(f"[kg_agent] fused_extract failed: {e!r}")
             return FusedResult(importance_score=0.0, entities=[], relationships=[])
 
     def find_seed_nodes(self, text: str) -> list[str]:

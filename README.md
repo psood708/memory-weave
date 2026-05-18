@@ -297,42 +297,7 @@ uv run pytest memoryweave/tests/test_two_phase_retrieval.py memoryweave/tests/te
 
 ---
 
-## 📅 Build Status
-
-### ✅ Week 1 — Core Memory Infrastructure (Complete)
-
-- [x] Working Memory Agent — sliding buffer with configurable max turns
-- [x] Episodic Memory Agent — ChromaDB storage, importance scoring, exponential decay, pruning
-- [x] Memory Orchestrator (v1) — fan-out reads, context merge, token budget enforcement
-- [x] Conversational Agent — context injection, response generation, write-back
-- [x] CLI test harness with live stats
-- [x] Unit tests for episodic store and working memory
-
-### ✅ Week 2 — Knowledge Graph Agent (Complete)
-
-- [x] KG Agent — entity extraction via qwen3.5:9b JSON mode (Pydantic schema)
-- [x] Graph operations — upsert nodes/edges, BFS traversal, Hebbian reinforcement, decay + pruning
-- [x] Two-phase retrieval — episodic entities → graph traversal → merged context
-- [x] Memory Orchestrator (v2) — full three-tier fan-out via LangGraph StateGraph
-- [x] LangSmith tracing (env-var enabled via LangChain)
-
-### 📋 Week 3 — FastAPI + Next.js UI
-
-- [ ] FastAPI backend with SSE streaming
-- [ ] Chat interface with memory attribution badges
-- [ ] Memory state panel (episodes + scores)
-- [ ] Live knowledge graph visualization (react-force-graph)
-- [ ] Evaluation dashboard
-
-### 📋 Week 4 — Polish + Benchmarking
-
-- [ ] Docker Compose (single `docker compose up`)
-- [ ] Benchmark report (3 sessions × 50 turns × 3 memory strategies)
-- [ ] Demo GIF
-
----
-
-## 📊 Key Metrics (to be filled after Week 4 benchmarking)
+## 📊 Key Metrics
 
 | Metric | Result |
 |---|---|
