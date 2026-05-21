@@ -10,6 +10,19 @@ docs/
 # Virtual environments
 .venv
 
+# Test + tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# OS
+.DS_Store
+*.log
+
+# TypeScript build artifacts
+tsconfig.tsbuildinfo
+frontend/tsconfig.tsbuildinfo
+
 # Secrets — never commit (root-anchored so frontend/.env.* can be committed)
 /.env
 /.env.development
@@ -20,3 +33,8 @@ docs/
 .claude
 kg_store.json
 data/
+
+# Personal — scratch files, notes, interview prep (yours only, never commits)
+PERSONAL.md
+scratch/
+notes/
