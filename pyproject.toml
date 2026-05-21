@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12, <3.14"
 dependencies = [
+    "aiosqlite>=0.22.1",
     "chromadb>=1.5.9",
     "fastapi>=0.136.1",
     "huggingface-hub>=1.14.0",
@@ -15,6 +16,7 @@ dependencies = [
     "langsmith>=0.8.3",
     "networkx>=3.6.1",
     "python-dotenv>=1.2.2",
+    "python-jose[cryptography]>=3.5.0",
     "uvicorn>=0.46.0",
 ]
 
@@ -25,4 +27,5 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
+asyncio_mode = "auto"
 pythonpath = ["."]
