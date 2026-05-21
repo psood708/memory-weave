@@ -55,6 +55,11 @@ class Settings(BaseSettings):
     # API
     cors_origins: list[str] = ["*"]
 
+    # Auth
+    auth_secret: str = ""
+    google_client_id: str = ""
+    google_client_secret: str = ""
+
     model_config = SettingsConfigDict(
         # Base .env first, then env-specific overrides (e.g. .env.production)
         env_file=(".env", f".env.{_APP_ENV}"),
