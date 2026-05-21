@@ -1,7 +1,11 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import { JWT } from "next-auth/jwt";
-import { sign, verify } from "jsonwebtoken";
+import { SignJWT, jwtVerify } from "jose";
+
+function secretKey(secret: string | Uint8Array) {
+  return typeof secret === "string" ? new TextEncoder().encode(secret) : secret;
+}
 
 export const { auth, handlers, signIn, signOut } = NextAuth({
   providers: [
@@ -13,10 +17,15 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
   secret: process.env.AUTH_SECRET,
   jwt: {
     encode: async ({ token, secret }) => {
-      return sign(token as object, secret as string, { algorithm: "HS256" });
+      return new SignJWT(token as Record<string, unknown>)
+        .setProtectedHeader({ alg: "HS256" })
+        .sign(secretKey(secret as string));
     },
     decode: async ({ token, secret }) => {
-      return verify(token!, secret as string) as JWT;
+      const { payload } = await jwtVerify(token!, secretKey(secret as string), {
+        algorithms: ["HS256"],
+      });
+      return payload as JWT;
     },
   },
   callbacks: {
