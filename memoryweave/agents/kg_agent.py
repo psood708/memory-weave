@@ -75,7 +75,7 @@ class KGAgent:
     """Extracts entities from conversation turns and manages KG read/write paths."""
 
     def __init__(self, store: KnowledgeGraphStore | None = None, provider: str | None = None):
-        self._store = store or KnowledgeGraphStore()
+        self._store = store or KnowledgeGraphStore(persist_path=settings.kg_store_path)
         self._extraction_llm = get_extraction_llm(provider=provider)
 
     def fused_extract(self, text: str) -> FusedResult:

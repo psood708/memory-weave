@@ -10,10 +10,13 @@ docs/
 # Virtual environments
 .venv
 
-# Secrets — never commit
-.env
+# Secrets — never commit (root-anchored so frontend/.env.* can be committed)
+/.env
+/.env.development
+/.env.production
 
-# Runtime state
+# Runtime state — env-namespaced data dirs replace these
 .chroma/
 .claude
 kg_store.json
+data/

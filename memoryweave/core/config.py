@@ -1,11 +1,19 @@
-from pydantic_settings import BaseSettings
+import os
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_APP_ENV = os.getenv("APP_ENV", "development")
 
 
 class Settings(BaseSettings):
+    # Environment
+    app_env: str = "development"
+
     # Ollama
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "qwen3.5:9b"
 
+    # LangSmith
     langsmith_api_key: str = ""
     langsmith_tracing: bool = False
     langsmith_endpoint: str = "https://api.smith.langchain.com"
@@ -32,14 +40,31 @@ class Settings(BaseSettings):
     context_token_budget: int = 2000
 
     # LLM provider
-    llm_provider: str = "ollama"          # default; overridden per-request via API
+    llm_provider: str = "ollama"
 
-    # HuggingFace (used when provider = "huggingface")
+    # HuggingFace
     hf_model: str = "Qwen/Qwen2.5-7B-Instruct"
     hf_extraction_model: str = "Qwen/Qwen2.5-7B-Instruct"
     hf_api_key: str = ""
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    # Storage paths — differ per environment
+    chroma_path: str = "./data/dev/chroma"
+    kg_store_path: str = "./data/dev/kg_store.json"
+    eval_db_path: str = "./data/dev/metrics.db"
+
+    # API
+    cors_origins: list[str] = ["*"]
+
+    model_config = SettingsConfigDict(
+        # Base .env first, then env-specific overrides (e.g. .env.production)
+        env_file=(".env", f".env.{_APP_ENV}"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env == "production"
 
 
 settings = Settings()
