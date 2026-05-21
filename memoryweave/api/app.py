@@ -1,6 +1,7 @@
 import asyncio
 import json
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, Query
@@ -8,6 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage
 from pydantic import BaseModel
+
+from memoryweave.db.database import init_db
 
 from memoryweave.api.models import (
     Budget,
@@ -26,7 +29,16 @@ from memoryweave.api.session import SessionState, clear_sessions, get_or_create_
 from memoryweave.core.config import settings
 from memoryweave.core.llm import extract_text
 
-app = FastAPI(title="MemoryWeave API", version="0.1.0")
+
+# ── Lifespan context manager ──────────────────────────────────────────────────
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
+    yield
+
+
+app = FastAPI(title="MemoryWeave API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
