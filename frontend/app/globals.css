@@ -2149,50 +2149,64 @@ input, textarea { font: inherit; color: inherit; }
   color: var(--working);
 }
 
-/* ============ Bot message markdown rendering ============ */
-.msg.bot .msg-body .md-p {
+/* ============ Bot message markdown rendering (shared via .md-body) ============ */
+.msg.bot .msg-body .md-p,
+.md-body .md-p {
   margin: 0 0 10px;
   line-height: 1.65;
 }
-.msg.bot .msg-body .md-p:last-child { margin: 0; }
+.msg.bot .msg-body .md-p:last-child,
+.md-body .md-p:last-child { margin: 0; }
 
-.msg.bot .msg-body .md-strong {
+.msg.bot .msg-body .md-strong,
+.md-body .md-strong {
   font-weight: 650;
   color: var(--fg-0);
 }
-.msg.bot .msg-body .md-em {
+.msg.bot .msg-body .md-em,
+.md-body .md-em {
   font-style: italic;
   color: var(--fg-1);
 }
 
-.msg.bot .msg-body .md-h {
+.msg.bot .msg-body .md-h,
+.md-body .md-h {
   font-weight: 650;
   color: var(--fg-0);
   letter-spacing: -0.01em;
   margin: 14px 0 6px;
   line-height: 1.3;
 }
-.msg.bot .msg-body .md-h:first-child { margin-top: 0; }
-.msg.bot .msg-body .md-h1 { font-size: 16px; }
-.msg.bot .msg-body .md-h2 { font-size: 14.5px; }
-.msg.bot .msg-body .md-h3 { font-size: 13px; }
+.msg.bot .msg-body .md-h:first-child,
+.md-body .md-h:first-child { margin-top: 0; }
+.msg.bot .msg-body .md-h1, .md-body .md-h1 { font-size: 16px; }
+.msg.bot .msg-body .md-h2, .md-body .md-h2 { font-size: 14.5px; }
+.msg.bot .msg-body .md-h3, .md-body .md-h3 { font-size: 13px; }
 
 .msg.bot .msg-body .md-ul,
-.msg.bot .msg-body .md-ol {
+.msg.bot .msg-body .md-ol,
+.md-body .md-ul,
+.md-body .md-ol {
   margin: 4px 0 10px;
   padding-left: 20px;
   display: flex; flex-direction: column; gap: 3px;
 }
 .msg.bot .msg-body .md-ul:last-child,
-.msg.bot .msg-body .md-ol:last-child { margin-bottom: 0; }
-.msg.bot .msg-body .md-li {
+.msg.bot .msg-body .md-ol:last-child,
+.md-body .md-ul:last-child,
+.md-body .md-ol:last-child { margin-bottom: 0; }
+.msg.bot .msg-body .md-li,
+.md-body .md-li {
   line-height: 1.55;
   color: var(--fg-1);
 }
-.msg.bot .msg-body .md-ul .md-li { list-style-type: disc; }
-.msg.bot .msg-body .md-ol .md-li { list-style-type: decimal; }
+.msg.bot .msg-body .md-ul .md-li,
+.md-body .md-ul .md-li { list-style-type: disc; }
+.msg.bot .msg-body .md-ol .md-li,
+.md-body .md-ol .md-li { list-style-type: decimal; }
 
-.msg.bot .msg-body .md-code {
+.msg.bot .msg-body .md-code,
+.md-body .md-code {
   font: 500 12px/1.4 var(--font-mono);
   padding: 1px 6px;
   border-radius: 4px;
@@ -2200,14 +2214,17 @@ input, textarea { font: inherit; color: inherit; }
   color: var(--working);
   border: 1px solid var(--line-2);
 }
-.msg.bot .msg-body .md-pre {
+.msg.bot .msg-body .md-pre,
+.md-body .md-pre {
   margin: 8px 0;
   border-radius: var(--r-md);
   overflow: hidden;
   border: 1px solid var(--line-2);
 }
-.msg.bot .msg-body .md-pre:last-child { margin-bottom: 0; }
-.msg.bot .msg-body .md-pre .md-code-block {
+.msg.bot .msg-body .md-pre:last-child,
+.md-body .md-pre:last-child { margin-bottom: 0; }
+.msg.bot .msg-body .md-pre .md-code-block,
+.md-body .md-pre .md-code-block {
   display: block;
   padding: 14px 16px;
   background: var(--bg-0);
@@ -2217,7 +2234,8 @@ input, textarea { font: inherit; color: inherit; }
   white-space: pre;
 }
 
-.msg.bot .msg-body .md-blockquote {
+.msg.bot .msg-body .md-blockquote,
+.md-body .md-blockquote {
   margin: 6px 0;
   padding: 8px 14px;
   border-left: 3px solid var(--kg);
@@ -2227,14 +2245,17 @@ input, textarea { font: inherit; color: inherit; }
   font-style: italic;
 }
 
-.msg.bot .msg-body .md-a {
+.msg.bot .msg-body .md-a,
+.md-body .md-a {
   color: var(--working);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-.msg.bot .msg-body .md-a:hover { color: var(--fg-0); }
+.msg.bot .msg-body .md-a:hover,
+.md-body .md-a:hover { color: var(--fg-0); }
 
-.msg.bot .msg-body .md-hr {
+.msg.bot .msg-body .md-hr,
+.md-body .md-hr {
   border: none;
   border-top: 1px solid var(--line-1);
   margin: 12px 0;
@@ -2773,9 +2794,8 @@ input, textarea { font: inherit; color: inherit; }
 .gfs-answer-text {
   font: 400 14px/1.8 var(--font-sans);
   color: var(--fg-1);
-  white-space: pre-wrap;
-  word-break: break-word;
 }
+.gfs-answer-text .md-body { font-size: 14px; line-height: 1.8; }
 .gfs-answer-cursor {
   display: inline-block;
   width: 2px; height: 1.1em;

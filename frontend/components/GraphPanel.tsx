@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './Icon';
 import { streamChat } from '@/lib/api';
+import BotMarkdown from './BotMarkdown';
 import type { Edge, Entity } from '@/lib/data';
 
 const NODE_COLORS: Record<Entity['type'], { fill: string; glow: string }> = {
@@ -608,7 +609,7 @@ export default function GraphPanel({
             ) : (
               <>
                 <div className="gfs-answer-text">
-                  {answer}
+                  <BotMarkdown text={answer} />
                   {streaming && <span className="gfs-answer-cursor" />}
                 </div>
                 {answerMeta && !streaming && (
