@@ -1,9 +1,7 @@
 import json
 import re
-from typing import Literal
-
 from langchain_core.messages import HumanMessage
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from memoryweave.core.config import settings
 from memoryweave.core.llm import extract_text, get_extraction_llm
@@ -47,10 +45,35 @@ entity/relationship rules:
 Return ONLY the JSON object."""
 
 
+_TYPE_COERCE: dict[str, str] = {
+    "Technology": "Fact",
+    "Tool": "Fact",
+    "Model": "Fact",
+    "Service": "Organization",
+    "Component": "Fact",
+    "Library": "Fact",
+    "Framework": "Fact",
+    "Database": "Fact",
+    "Platform": "Organization",
+    "Concept": "Fact",
+    "Language": "Fact",
+    "Method": "Fact",
+}
+
+_ALLOWED_TYPES = {"Person", "Project", "Preference", "Fact", "Organization", "Event"}
+
+
 class Entity(BaseModel):
     name: str
-    type: Literal["Person", "Project", "Preference", "Fact", "Organization", "Event"]
+    type: str
     description: str
+
+    @field_validator("type", mode="before")
+    @classmethod
+    def coerce_type(cls, v: str) -> str:
+        if v in _ALLOWED_TYPES:
+            return v
+        return _TYPE_COERCE.get(v, "Fact")
 
 
 class Relationship(BaseModel):
