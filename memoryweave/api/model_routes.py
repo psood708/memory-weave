@@ -2,7 +2,7 @@ import asyncio
 
 import aiosqlite
 from fastapi import APIRouter, Depends, HTTPException
-from huggingface_hub import InferenceClient
+from huggingface_hub import HfApi
 from pydantic import BaseModel
 
 from memoryweave.auth.models import UserSession
@@ -36,8 +36,8 @@ async def save_model_config(
 ):
     if req.provider == "huggingface" and req.hf_api_key:
         try:
-            client = InferenceClient(token=req.hf_api_key)
-            await asyncio.to_thread(client.whoami)
+            api = HfApi(token=req.hf_api_key)
+            await asyncio.to_thread(api.whoami)
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid HuggingFace API key")
 
