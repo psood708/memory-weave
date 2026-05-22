@@ -10,7 +10,17 @@ from fastapi.responses import StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage
 from pydantic import BaseModel
 
+import aiosqlite
+
 from memoryweave.db.database import init_db
+from memoryweave.api.eval_routes import router as eval_router
+from memoryweave.eval.bus import EvalEventBus
+from memoryweave.eval.judges.heuristic_judge import HeuristicJudge
+from memoryweave.eval.judges.ragas_judge import RagasJudge
+from memoryweave.eval.repository.sqlite_repo import SQLiteMetricsRepository
+from memoryweave.eval.workers.judge import LLMJudgeWorker
+from memoryweave.eval.workers.token_metrics import TokenMetricsWorker
+from memoryweave.eval.workers.forgetting import ForgettingTracker
 
 from memoryweave.api.models import (
     Budget,
@@ -26,16 +36,53 @@ from memoryweave.api.models import (
     WorkingTurn,
 )
 from memoryweave.api.session import SessionState, clear_sessions, get_or_create_session
+from memoryweave.api.model_routes import router as model_router
 from memoryweave.core.config import settings
 from memoryweave.core.llm import extract_text
+
+
+# ── Eval pipeline singletons ──────────────────────────────────────────────────
+
+eval_bus = EvalEventBus()
+forgetting_tracker = ForgettingTracker()
+judge_worker: LLMJudgeWorker = None  # initialized in lifespan
 
 
 # ── Lifespan context manager ──────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global judge_worker
     await init_db()
-    yield
+
+    async with aiosqlite.connect(settings.eval_db_path) as db:
+        db.row_factory = aiosqlite.Row
+        repo = SQLiteMetricsRepository(db)
+        token_worker = TokenMetricsWorker(repo)
+
+        backend = settings.eval_judge_backend
+        judge = RagasJudge() if backend == "ragas" else HeuristicJudge()
+        judge_worker = LLMJudgeWorker(
+            judge=judge, repo=repo,
+            max_failures=settings.judge_circuit_breaker_failures,
+            timeout_secs=settings.judge_circuit_breaker_timeout,
+        )
+
+        async def _eval_consumer():
+            while True:
+                event = await eval_bus.get()
+                turn_id = await token_worker.process(event)
+                if turn_id:
+                    event.turn_metric_id = turn_id
+                    await judge_worker.process(
+                        turn_id, event.question,
+                        event.episode_texts + event.kg_texts,
+                        event.answer,
+                    )
+
+        consumer_task = asyncio.create_task(_eval_consumer())
+        yield
+        consumer_task.cancel()
 
 
 app = FastAPI(title="MemoryWeave API", version="0.1.0", lifespan=lifespan)
@@ -47,6 +94,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(model_router)
+app.include_router(eval_router)
 
 
 # ── Request models ────────────────────────────────────────────────────────────

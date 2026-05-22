@@ -1,9 +1,19 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
 from langchain_ollama import ChatOllama
 
 from memoryweave.core.config import settings
 
+if TYPE_CHECKING:
+    from memoryweave.models.config_repo import UserModelConfig
 
-def get_llm(temperature: float = 0.7, provider: str | None = None):
+
+def get_llm(temperature: float = 0.7, provider: str | None = None, user_config: UserModelConfig | None = None):
+    if user_config and user_config.provider == "huggingface" and user_config.chat_model:
+        return _hf_llm(temperature, model=user_config.chat_model, api_key=user_config.hf_api_key)
     p = provider or settings.llm_provider
     if p == "huggingface":
         return _hf_llm(temperature)
@@ -35,11 +45,10 @@ def get_extraction_llm(provider: str | None = None):
     )
 
 
-def _hf_llm(temperature: float = 0.7):
-    from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
+def _hf_llm(temperature: float = 0.7, model: str | None = None, api_key: str | None = None):
     endpoint = HuggingFaceEndpoint(
-        repo_id=settings.hf_model,
-        huggingfacehub_api_token=settings.hf_api_key or None,
+        repo_id=model or settings.hf_model,
+        huggingfacehub_api_token=api_key or settings.hf_api_key or None,
         temperature=temperature,
         max_new_tokens=512,
         task="text-generation",
@@ -48,7 +57,6 @@ def _hf_llm(temperature: float = 0.7):
 
 
 def _hf_extraction_llm():
-    from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
     endpoint = HuggingFaceEndpoint(
         repo_id=settings.hf_extraction_model,
         huggingfacehub_api_token=settings.hf_api_key or None,

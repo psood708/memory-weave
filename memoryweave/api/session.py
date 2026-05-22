@@ -1,5 +1,6 @@
 import asyncio
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 from langchain_core.messages import AIMessage, HumanMessage
 
@@ -31,6 +32,35 @@ class SessionState:
         entity_names = self.kg.update_graph(fused, episode_id=episode.id if episode else "")
         if episode and entity_names:
             self.episodic.update_entity_links(episode.id, entity_names)
+
+        try:
+            from memoryweave.api.app import eval_bus
+            from memoryweave.eval.events import TurnEvent
+
+            retrieved_episodes = self.episodic.retrieve(user_input)
+            event = TurnEvent(
+                session_id=self.session_id,
+                user_id=getattr(self, "user_id", ""),
+                turn_number=self.turn_count,
+                question=user_input,
+                answer=response,
+                episode_texts=[ep.content for ep in retrieved_episodes],
+                kg_texts=[],
+                episode_embeddings=[
+                    ep.embedding
+                    for ep in retrieved_episodes
+                    if getattr(ep, "embedding", None)
+                ],
+                kg_embedding=[],
+                system_tokens=self.last_token_estimate,
+                naive_tokens=self.last_token_estimate,
+                retrieval_latency_ms=0,
+                total_latency_ms=0,
+                timestamp=datetime.now(timezone.utc),
+            )
+            eval_bus.emit(event)
+        except Exception:
+            pass
 
 
 # In-memory session registry: "{session_id}:{provider}" -> SessionState

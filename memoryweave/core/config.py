@@ -60,6 +60,15 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     google_client_secret: str = ""
 
+    # Encryption
+    encryption_key: str = ""
+
+    # Eval
+    kg_contribution_threshold: float = 0.85
+    eval_judge_backend: str = "heuristic"
+    judge_circuit_breaker_failures: int = 3
+    judge_circuit_breaker_timeout: int = 300
+
     model_config = SettingsConfigDict(
         # Base .env first, then env-specific overrides (e.g. .env.production)
         env_file=(".env", f".env.{_APP_ENV}"),

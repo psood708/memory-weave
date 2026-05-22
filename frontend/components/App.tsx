@@ -5,6 +5,7 @@ import MemoryPanel from './MemoryPanel';
 import Conversation from './Conversation';
 import GraphPanel from './GraphPanel';
 import Evals from './Evals';
+import EvalDashboard from './EvalDashboard';
 import Toasts, { type ToastItem } from './Toasts';
 import { EpisodeInspector, EntityInspector } from './Inspector';
 import { Icon } from './Icon';
@@ -289,6 +290,7 @@ export default function App(props: { initialTab?: Tab }) {
         </div>
       ) : (
         <div className="evals-main">
+          <EvalDashboard sessionId={sessionId} />
           <Evals />
         </div>
       )}
