@@ -252,9 +252,20 @@ function BudgetDetail({ budget, onClose }: { budget: Budget; onClose: () => void
   );
 }
 
-function Composer({ budget, onSend }: { budget: Budget; onSend?: (text: string) => void }) {
+type ComposerMode = 'memory' | 'question';
+
+const QUESTION_RE = /^(what|who|when|where|why|how|is|are|can|does|do|did|will|would|could|should|has|have|had|which|whose|whom)\b/i;
+
+function isQuestion(text: string): boolean {
+  const t = text.trim();
+  return t.endsWith('?') || QUESTION_RE.test(t);
+}
+
+function Composer({ budget, onSend }: { budget: Budget; onSend?: (text: string, mode: ComposerMode) => void }) {
   const [showBudget, setShowBudget] = useState(false);
   const [text, setText] = useState('');
+  const [mode, setMode] = useState<ComposerMode>('memory');
+  const [modeError, setModeError] = useState('');
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const pct = Math.round((budget.used / budget.total) * 100);
 
@@ -264,10 +275,26 @@ function Composer({ budget, onSend }: { budget: Budget; onSend?: (text: string) 
     el.style.height = Math.min(120, el.scrollHeight) + 'px';
   };
 
+  const switchMode = (m: ComposerMode) => {
+    setMode(m);
+    setModeError('');
+  };
+
   const submit = () => {
     const t = text.trim();
     if (!t || !onSend) return;
-    onSend(t);
+
+    if (mode === 'memory' && isQuestion(t)) {
+      setModeError('This looks like a question. Switch to Question mode so it won\'t be saved to memory.');
+      return;
+    }
+    if (mode === 'question' && !isQuestion(t)) {
+      setModeError('This looks like a statement. Switch to Memory mode to save it to memory.');
+      return;
+    }
+
+    setModeError('');
+    onSend(t, mode);
     setText('');
     if (taRef.current) {
       taRef.current.style.height = 'auto';
@@ -282,17 +309,51 @@ function Composer({ budget, onSend }: { budget: Budget; onSend?: (text: string) 
     }
   };
 
+  const placeholder = mode === 'memory'
+    ? 'Share something to remember — people, decisions, facts…'
+    : 'Ask a question — I\'ll answer without saving to memory.';
+
   return (
     <div className="composer-wrap">
       <div className="composer-inner">
-        <div className="composer">
+        <div className="mode-toggle-row">
+          <div className="mode-toggle">
+            <button
+              className={`mode-btn${mode === 'memory' ? ' mode-btn--active mode-btn--memory' : ''}`}
+              onClick={() => switchMode('memory')}
+            >
+              Memory
+            </button>
+            <button
+              className={`mode-btn${mode === 'question' ? ' mode-btn--active mode-btn--question' : ''}`}
+              onClick={() => switchMode('question')}
+            >
+              Question
+            </button>
+          </div>
+          <span className="mode-desc">
+            {mode === 'memory' ? 'Saves to episodic + graph' : 'Retrieves only — no writes'}
+          </span>
+        </div>
+        {modeError && (
+          <div className="mode-error">
+            {modeError}
+            <button
+              className="mode-error-switch"
+              onClick={() => switchMode(mode === 'memory' ? 'question' : 'memory')}
+            >
+              Switch to {mode === 'memory' ? 'Question' : 'Memory'}
+            </button>
+          </div>
+        )}
+        <div className={`composer composer--${mode}`}>
           <textarea
             ref={taRef}
             rows={1}
             value={text}
-            onChange={(e) => { setText(e.target.value); autosize(e.target); }}
+            onChange={(e) => { setText(e.target.value); autosize(e.target); setModeError(''); }}
             onKeyDown={onKeyDown}
-            placeholder="Ask anything — I'll remember it."
+            placeholder={placeholder}
           />
           <div className="composer-tools">
             <button className="icon-btn" title="Attach"><Icon name="clip" size={14} /></button>
@@ -307,9 +368,6 @@ function Composer({ budget, onSend }: { budget: Budget; onSend?: (text: string) 
           <button className="composer-send" onClick={submit} disabled={!text.trim()}>
             Send <span className="kbd">↵</span>
           </button>
-        </div>
-        <div className="composer-hint">
-          Memory is on. Mention people, decisions, or dates and they'll be remembered across sessions.
         </div>
       </div>
     </div>
@@ -327,7 +385,7 @@ export interface ConversationProps {
   onToggleCtx: (i: number) => void;
   onEpisode: (id: string) => void;
   onEntity: (name: string) => void;
-  onSend?: (text: string) => void;
+  onSend?: (text: string, mode: ComposerMode) => void;
   onConvClear: () => void;
   budget: Budget;
   sessionId: string;

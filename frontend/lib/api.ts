@@ -19,13 +19,13 @@ export interface MemoryState {
 }
 
 export async function fetchMemoryState(sessionId: string, provider: 'ollama' | 'huggingface' = 'ollama'): Promise<MemoryState> {
-  const res = await fetch(`${BASE}/api/memory?session_id=${sessionId}&provider=${provider}`);
+  const res = await fetch(`${BASE}/api/memory?session_id=${sessionId}&provider=${provider}`, { credentials: 'include' });
   if (!res.ok) throw new Error('Failed to fetch memory state');
   return res.json();
 }
 
 export async function resetSessions(): Promise<{ cleared: number }> {
-  const res = await fetch(`${BASE}/api/sessions/reset`, { method: 'POST' });
+  const res = await fetch(`${BASE}/api/sessions/reset`, { method: 'POST', credentials: 'include' });
   if (!res.ok) throw new Error('Reset failed');
   return res.json();
 }
@@ -39,6 +39,7 @@ export async function clearMemory(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ session_id: sessionId, provider, target }),
+    credentials: 'include',
   });
   if (!res.ok) throw new Error('Clear failed');
   return res.json();
@@ -48,6 +49,7 @@ export function streamChat(
   sessionId: string,
   message: string,
   provider: 'ollama' | 'huggingface',
+  mode: 'memory' | 'question',
   callbacks: {
     onAgentStep: (step: string, status: 'active' | 'done') => void;
     onToken: (text: string) => void;
@@ -63,8 +65,9 @@ export function streamChat(
       const res = await fetch(`${BASE}/api/chat/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, message, provider }),
+        body: JSON.stringify({ session_id: sessionId, message, provider, mode }),
         signal: controller.signal,
+        credentials: 'include',
       });
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

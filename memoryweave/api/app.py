@@ -108,6 +108,7 @@ class ChatRequest(BaseModel):
     session_id: str
     message: str
     provider: str = "ollama"
+    mode: str = "memory"  # "memory" | "question"
 
 
 # ── SSE helpers ───────────────────────────────────────────────────────────────
@@ -207,9 +208,11 @@ async def chat_stream(
         )
         yield _sse("done", done_payload.model_dump())
 
-        # Write memory, then signal the frontend to refresh panels.
-        await session.write_turn_async(req.message, response_text)
-        yield _sse("memory_updated", {})
+        # In memory mode: write to episodic + KG and notify frontend.
+        # In question mode: retrieval already ran; skip writes so graph stays clean.
+        if req.mode != "question":
+            await session.write_turn_async(req.message, response_text)
+            yield _sse("memory_updated", {})
 
     return StreamingResponse(
         generate(),

@@ -154,7 +154,7 @@ export default function App(props: { initialTab?: Tab }) {
   };
 
   /* SSE-backed composer — falls back gracefully if backend is down */
-  const onSend = useCallback(async (text: string) => {
+  const onSend = useCallback(async (text: string, mode: 'memory' | 'question') => {
     const trimmed = text.trim();
     if (!trimmed) return;
     const nextTurn = (conv[conv.length - 1]?.turn || 0) + 1;
@@ -177,7 +177,7 @@ export default function App(props: { initialTab?: Tab }) {
     setAgentActive(0);
     setStreamedChars(0);
 
-    streamChat(sessionId, trimmed, provider, {
+    streamChat(sessionId, trimmed, provider, mode, {
       onAgentStep: (step, status) => {
         if (status === 'active' && stepMap[step] !== undefined) {
           setAgentActive(stepMap[step] - 1);
