@@ -1,5 +1,5 @@
-"use client";
-import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
+'use client';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 type Turn = {
   turn_number: number;
@@ -10,40 +10,95 @@ type Turn = {
   kg_contributed: boolean;
 };
 
-export default function EvalChart({ turns }: { turns: Turn[] }) {
-  const data = [...turns].reverse().map((t) => ({
-    turn: t.turn_number,
-    "System tokens": t.system_tokens,
-    "Naive buffer": t.naive_tokens,
-    "Judge score": t.judge_score != null ? Math.round(t.judge_score * 100) : null,
-  }));
+interface Props {
+  turns: Turn[];
+  hoveredTurn?: number | null;
+  onHover?: (turn: number | null) => void;
+}
+
+const tooltipStyle = {
+  contentStyle: {
+    background: 'var(--bg-3)',
+    border: '1px solid var(--line-2)',
+    borderRadius: 8,
+    padding: '8px 12px',
+    fontSize: 11,
+    fontFamily: 'var(--font-mono)',
+  },
+  labelStyle: { color: 'var(--fg-3)', marginBottom: 4 },
+  itemStyle: { color: 'var(--fg-1)' },
+  cursor: { stroke: 'var(--line-3)' },
+};
+
+const axisProps = {
+  tick: { fill: 'var(--fg-4)', fontSize: 10, fontFamily: 'var(--font-mono)' },
+  axisLine: false as const,
+  tickLine: false as const,
+};
+
+export default function EvalChart({ turns, onHover }: Props) {
+  const data = [...turns]
+    .sort((a, b) => a.turn_number - b.turn_number)
+    .map(t => ({
+      turn: t.turn_number,
+      'MW tokens': t.system_tokens,
+      Naive: t.naive_tokens,
+      'Judge %': t.judge_score != null ? Math.round(t.judge_score * 100) : null,
+    }));
+
+  const handleMouseMove = (state: any) => {
+    if (state?.isTooltipActive && state.activePayload?.[0]) {
+      onHover?.(state.activePayload[0].payload.turn as number);
+    }
+  };
+  const handleMouseLeave = () => onHover?.(null);
+
+  const activeDot = (color: string) => ({ r: 5, fill: color, stroke: 'var(--bg-0)', strokeWidth: 2 });
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <p className="text-gray-400 text-xs mb-2">Token usage per turn</p>
-        <ResponsiveContainer width="100%" height={160}>
-          <LineChart data={data}>
-            <XAxis dataKey="turn" tick={{ fill: "#9ca3af", fontSize: 11 }} />
-            <YAxis tick={{ fill: "#9ca3af", fontSize: 11 }} />
-            <Tooltip contentStyle={{ background: "#1f2937", border: "none", borderRadius: 8 }} />
-            <Legend />
-            <Line type="monotone" dataKey="System tokens" stroke="#6366f1" dot={false} strokeWidth={2} />
-            <Line type="monotone" dataKey="Naive buffer" stroke="#374151" dot={false} strokeWidth={1} strokeDasharray="4 4" />
-          </LineChart>
-        </ResponsiveContainer>
+    <>
+      <div className="chart-card">
+        <div className="chart-head">
+          <div>
+            <h3>Token usage per turn</h3>
+            <div className="sub">MemoryWeave vs naive rolling buffer</div>
+          </div>
+          <div className="legend">
+            <span><span className="sw" style={{ background: 'var(--kg)' }} />MW</span>
+            <span><span className="sw" style={{ background: 'var(--fg-4)' }} />Naive</span>
+          </div>
+        </div>
+        <div className="chart-area" style={{ height: 180 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave}>
+              <XAxis dataKey="turn" {...axisProps} />
+              <YAxis {...axisProps} />
+              <Tooltip {...tooltipStyle} />
+              <Line type="monotone" dataKey="MW tokens" stroke="var(--kg)" dot={false} strokeWidth={2} activeDot={activeDot('var(--kg)')} />
+              <Line type="monotone" dataKey="Naive" stroke="var(--fg-3)" dot={false} strokeWidth={1.5} strokeDasharray="4 4" activeDot={activeDot('var(--fg-3)')} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       </div>
-      <div>
-        <p className="text-gray-400 text-xs mb-2">Retrieval accuracy (judge score %)</p>
-        <ResponsiveContainer width="100%" height={120}>
-          <LineChart data={data}>
-            <XAxis dataKey="turn" tick={{ fill: "#9ca3af", fontSize: 11 }} />
-            <YAxis domain={[0, 100]} tick={{ fill: "#9ca3af", fontSize: 11 }} />
-            <Tooltip contentStyle={{ background: "#1f2937", border: "none", borderRadius: 8 }} />
-            <Line type="monotone" dataKey="Judge score" stroke="#10b981" dot={false} strokeWidth={2} />
-          </LineChart>
-        </ResponsiveContainer>
+
+      <div className="chart-card">
+        <div className="chart-head">
+          <div>
+            <h3>Judge score per turn</h3>
+            <div className="sub">Heuristic quality estimate (0 – 100%)</div>
+          </div>
+        </div>
+        <div className="chart-area" style={{ height: 180 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave}>
+              <XAxis dataKey="turn" {...axisProps} />
+              <YAxis domain={[0, 100]} {...axisProps} />
+              <Tooltip {...tooltipStyle} />
+              <Line type="monotone" dataKey="Judge %" stroke="var(--ok)" dot={false} strokeWidth={2} activeDot={activeDot('var(--ok)')} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

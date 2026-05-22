@@ -3,6 +3,41 @@ import { useState } from 'react';
 import { Icon } from './Icon';
 import type { Edge, Entity, Episode, WorkingTurn } from '@/lib/data';
 
+function ForgettingCurve({ importance, hoursAgo }: { importance: number; hoursAgo: number }) {
+  const λ = 0.04;
+  const duration = Math.max(hoursAgo, 1);
+  const I0 = Math.min(importance * Math.exp(λ * duration), 1.0);
+  const N = 28;
+  const H = 32, padT = 4, padB = 3;
+  const innerH = H - padT - padB;
+
+  const points = Array.from({ length: N }, (_, i) => {
+    const frac = i / (N - 1);
+    const t = frac * duration;
+    const val = Math.max(0, I0 * Math.exp(-λ * t));
+    return { x: frac * 100, y: padT + (1 - val) * innerH };
+  });
+
+  const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ');
+  const last = points[points.length - 1];
+  const area = `${line} L100,${H - padB} L0,${H - padB} Z`;
+
+  return (
+    <svg
+      viewBox={`0 0 100 ${H}`}
+      width="100%"
+      height={H}
+      preserveAspectRatio="none"
+      className="forget-curve"
+      aria-hidden="true"
+    >
+      <path d={area} fill="rgba(245,165,36,0.10)" />
+      <path d={line} fill="none" stroke="var(--episodic)" strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={last.x.toFixed(2)} cy={last.y.toFixed(2)} r="2.5" fill="var(--episodic)" />
+    </svg>
+  );
+}
+
 interface TierHeadProps {
   swatch: 'working' | 'episodic' | 'kg';
   label: string;
@@ -86,12 +121,10 @@ function EpisodicTier({ episodes, open, onToggle, onEpisode, hoveredEntity, prun
                 </span>
               </div>
               <div className="mc-text">{ep.text}</div>
-              <div className="mc-decay">
-                <div className="mc-decay-bar" style={{ width: `${Math.round(ep.decay * 100)}%` }} />
-              </div>
+              <ForgettingCurve importance={ep.importance} hoursAgo={ep.hoursAgo} />
               <div className="mc-row" style={{ marginTop: 1 }}>
-                <span style={{ color: 'var(--fg-4)' }}>decay</span>
-                <span style={{ color: 'var(--fg-3)' }}>{Math.round(ep.decay * 100)}%</span>
+                <span style={{ color: 'var(--fg-4)' }}>strength</span>
+                <span style={{ color: 'var(--fg-3)' }}>{Math.round(ep.importance * 100)}%</span>
                 <span className="mc-score" style={{ color: 'var(--fg-4)' }}>{ep.entities.length} entities</span>
               </div>
             </div>
