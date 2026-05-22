@@ -219,14 +219,9 @@ def build_graph_with_state(session_id: str | None = None) -> GraphWithAgents:
     return GraphWithAgents(graph=compiled, working=working, episodic=episodic, kg=kg)
 
 
-def build_read_graph_with_state(session_id: str | None = None, provider: str | None = None, user_config=None) -> GraphWithAgents:
-    """Read-only graph: retrieval + conversational only, no write_node.
-    Use for the API hot path; fire writes separately in a background task."""
-    sid = session_id or str(uuid.uuid4())
-    working = WorkingMemoryAgent()
-    episodic = EpisodicMemoryAgent(session_id=sid)
-    kg = KGAgent(provider=provider, user_config=user_config)
-    llm = get_llm(provider=provider, user_config=user_config)
+def _compile_graph(working: WorkingMemoryAgent, episodic: EpisodicMemoryAgent, kg: KGAgent, llm) -> object:
+    """Compile a LangGraph from existing agent objects and an LLM client.
+    Agents are captured by reference so memory state is preserved across recompiles."""
 
     def working_memory_node(state: MemoryWeaveState) -> dict:
         return {"working_context": working.format_for_context()}
@@ -267,7 +262,6 @@ def build_read_graph_with_state(session_id: str | None = None, provider: str | N
     builder.add_node("kg", kg_node)
     builder.add_node("merge", merge_node)
     builder.add_node("conversational", conversational_node)
-
     builder.add_edge(START, "working_memory")
     builder.add_edge(START, "episodic")
     builder.add_edge(START, "kg")
@@ -276,6 +270,16 @@ def build_read_graph_with_state(session_id: str | None = None, provider: str | N
     builder.add_edge("kg", "merge")
     builder.add_edge("merge", "conversational")
     builder.add_edge("conversational", END)
+    return builder.compile()
 
-    compiled = builder.compile()
+
+def build_read_graph_with_state(session_id: str | None = None, provider: str | None = None, user_config=None) -> GraphWithAgents:
+    """Read-only graph: retrieval + conversational only, no write_node.
+    Use for the API hot path; fire writes separately in a background task."""
+    sid = session_id or str(uuid.uuid4())
+    working = WorkingMemoryAgent()
+    episodic = EpisodicMemoryAgent(session_id=sid)
+    kg = KGAgent(provider=provider, user_config=user_config)
+    llm = get_llm(provider=provider, user_config=user_config)
+    compiled = _compile_graph(working, episodic, kg, llm)
     return GraphWithAgents(graph=compiled, working=working, episodic=episodic, kg=kg)

@@ -21,6 +21,15 @@ class SessionState:
     last_token_estimate: int = 0
     turn_count: int = 0
 
+    def update_provider(self, provider: str, user_config=None) -> None:
+        """Swap the inference LLM for a different provider while keeping all memory intact."""
+        from memoryweave.agents.graph import _compile_graph
+        from memoryweave.core.llm import get_extraction_llm, get_llm
+        self.provider = provider
+        llm = get_llm(provider=provider, user_config=user_config)
+        self.kg._extraction_llm = get_extraction_llm(provider=provider, user_config=user_config)
+        self.graph = _compile_graph(self.working, self.episodic, self.kg, llm)
+
     async def write_turn_async(self, user_input: str, response: str) -> None:
         """Run memory-write operations in the background after the response is streamed."""
         msgs = [HumanMessage(content=user_input), AIMessage(content=response)]
@@ -63,7 +72,8 @@ class SessionState:
             pass
 
 
-# In-memory session registry: "{session_id}:{provider}" -> SessionState
+# In-memory session registry: "{session_id}:{user_id}" -> SessionState
+# Provider is NOT part of the key — memory is shared across provider switches.
 _sessions: dict[str, SessionState] = {}
 
 
@@ -75,9 +85,10 @@ def clear_sessions() -> int:
 
 
 def get_or_create_session(session_id: str, provider: str = "ollama", user_config=None) -> SessionState:
-    """Return the existing session or create a new one. Keyed per user so configs don't bleed across accounts."""
+    """Return the existing session or create a new one.
+    Keyed by session+user only — provider switches update the LLM without touching memory."""
     user_id = user_config.user_id if user_config else ""
-    key = f"{session_id}:{provider}:{user_id}"
+    key = f"{session_id}:{user_id}"
     if key not in _sessions:
         bundle: GraphWithAgents = build_read_graph_with_state(session_id, provider=provider, user_config=user_config)
         _sessions[key] = SessionState(
@@ -88,4 +99,8 @@ def get_or_create_session(session_id: str, provider: str = "ollama", user_config
             episodic=bundle.episodic,
             kg=bundle.kg,
         )
+    else:
+        session = _sessions[key]
+        if session.provider != provider:
+            session.update_provider(provider, user_config)
     return _sessions[key]

@@ -1,8 +1,19 @@
 'use client';
 import Link from 'next/link';
 import { BrandMark } from './Icon';
+import type { Provider } from '@/lib/api';
 
-type Provider = 'ollama' | 'huggingface';
+const PROVIDER_LABEL: Record<Provider, string> = {
+  ollama: 'ollama·local',
+  huggingface: 'hf·inference',
+  custom: 'custom·key',
+};
+
+const PROVIDER_COLOR: Record<Provider, string> = {
+  ollama: 'var(--working)',
+  huggingface: 'var(--episodic)',
+  custom: 'var(--kg)',
+};
 
 export default function Topbar({
   tab, onTab, provider, onProvider,
@@ -35,15 +46,22 @@ export default function Topbar({
           <button
             className={`provider-btn ${provider === 'huggingface' ? 'active' : ''}`}
             onClick={() => onProvider('huggingface')}
-            title="Use HuggingFace Inference API"
+            title="Use HuggingFace Inference API (server key)"
           >
             HF
+          </button>
+          <button
+            className={`provider-btn ${provider === 'custom' ? 'active' : ''}`}
+            onClick={() => onProvider('custom')}
+            title="Use your own API key (configured in Setup)"
+          >
+            Custom
           </button>
         </div>
         <span className="kv">
           <span className="kv-k">provider</span>
-          <span className="kv-v" style={{ color: provider === 'huggingface' ? 'var(--episodic)' : 'var(--working)' }}>
-            {provider === 'huggingface' ? 'hf-inference' : 'ollama·local'}
+          <span className="kv-v" style={{ color: PROVIDER_COLOR[provider] }}>
+            {PROVIDER_LABEL[provider]}
           </span>
         </span>
         <span className="live"><span className="live-dot" /> live</span>

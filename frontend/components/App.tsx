@@ -13,7 +13,7 @@ import {
   type Episode, type Entity, type ChatMessage, type Budget,
 } from '@/lib/data';
 import { fetchMemoryState, resetSessions, streamChat } from '@/lib/api';
-import type { MemoryState } from '@/lib/api';
+import type { MemoryState, Provider } from '@/lib/api';
 
 type Tab = 'conversation' | 'evals';
 type Drawer =
@@ -81,7 +81,7 @@ export default function App(props: { initialTab?: Tab }) {
   const [hoveredEntity, setHoveredEntity] = useState<string | null>(null);
   const [pruning, setPruning] = useState<string | null>(null);
   const [memQuery, setMemQuery] = useState('');
-  const [provider, setProvider] = useState<'ollama' | 'huggingface'>('ollama');
+  const [provider, setProvider] = useState<Provider>('ollama');
 
   // Session ID — persisted in sessionStorage
   const [sessionId] = useState(() => {
@@ -211,7 +211,7 @@ export default function App(props: { initialTab?: Tab }) {
 
   return (
     <div className="app" style={{ ['--left-w' as any]: leftW + 'px', ['--right-w' as any]: rightW + 'px' }}>
-      <Topbar tab={tab} onTab={setTab} provider={provider} onProvider={setProvider} />
+      <Topbar tab={tab} onTab={setTab} provider={provider} onProvider={(p: Provider) => setProvider(p)} />
       {tab === 'conversation' ? (
         <div className="main conv-main">
           {leftCollapsed ? (

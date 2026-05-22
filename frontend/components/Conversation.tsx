@@ -7,7 +7,7 @@ import Settings from './Settings';
 import type {
   AgentStep, Budget, ChatMessage, ContextSnapshot, MessageMeta, RichSegment,
 } from '@/lib/data';
-import type { MemoryState } from '@/lib/api';
+import type { MemoryState, Provider } from '@/lib/api';
 
 /* ------------------------------------------------------------------ */
 /* Inline thinking trace — replaces the always-visible top stepper.    */
@@ -356,7 +356,7 @@ export interface ConversationProps {
   onConvClear: () => void;
   budget: Budget;
   sessionId: string;
-  provider: 'ollama' | 'huggingface';
+  provider: Provider;
   memoryState: MemoryState | null;
   onMemoryUpdate: (s: MemoryState) => void;
 }

@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './Icon';
 import { streamChat } from '@/lib/api';
+import type { Provider } from '@/lib/api';
 import BotMarkdown from './BotMarkdown';
 import type { Edge, Entity } from '@/lib/data';
 
@@ -243,7 +244,7 @@ export interface GraphPanelProps {
   focusedNode?: string | null;
   onCollapse?: () => void;
   sessionId?: string;
-  provider?: 'ollama' | 'huggingface';
+  provider?: Provider;
 }
 
 export default function GraphPanel({

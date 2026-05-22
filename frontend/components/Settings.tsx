@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Icon } from './Icon';
 import { clearMemory, fetchMemoryState } from '@/lib/api';
-import type { MemoryState } from '@/lib/api';
+import type { MemoryState, Provider } from '@/lib/api';
 
 interface ClearRowProps {
   label: string;
@@ -52,7 +52,7 @@ function ClearRow({ label, description, tier, swatch, onClear, busy }: ClearRowP
 
 export interface SettingsProps {
   sessionId: string;
-  provider: 'ollama' | 'huggingface';
+  provider: Provider;
   memoryState: MemoryState | null;
   onMemoryUpdate: (state: MemoryState) => void;
   onConvClear: () => void;

@@ -1,6 +1,8 @@
 // API client for MemoryWeave FastAPI backend
 const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+export type Provider = 'ollama' | 'huggingface' | 'custom';
+
 export interface MemoryState {
   working_turns: { role: 'user' | 'bot'; text: string }[];
   episodes: {
@@ -18,7 +20,7 @@ export interface MemoryState {
   };
 }
 
-export async function fetchMemoryState(sessionId: string, provider: 'ollama' | 'huggingface' = 'ollama'): Promise<MemoryState> {
+export async function fetchMemoryState(sessionId: string, provider: Provider = 'ollama'): Promise<MemoryState> {
   const res = await fetch(`${BASE}/api/memory?session_id=${sessionId}&provider=${provider}`, { credentials: 'include' });
   if (!res.ok) throw new Error('Failed to fetch memory state');
   return res.json();
@@ -48,7 +50,7 @@ export async function clearMemory(
 export function streamChat(
   sessionId: string,
   message: string,
-  provider: 'ollama' | 'huggingface',
+  provider: Provider,
   mode: 'memory' | 'question',
   callbacks: {
     onAgentStep: (step: string, status: 'active' | 'done') => void;

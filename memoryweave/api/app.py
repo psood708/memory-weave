@@ -362,9 +362,14 @@ class ClearRequest(BaseModel):
 
 
 @app.post("/api/sessions/clear-memory")
-async def clear_memory(req: ClearRequest):
+async def clear_memory(
+    req: ClearRequest,
+    user_session: UserSession = Depends(verify_session),
+    db: aiosqlite.Connection = Depends(get_db),
+):
     """Wipe stored memory for a session. target controls what gets cleared."""
-    session: SessionState = get_or_create_session(req.session_id, req.provider)
+    user_config = await ModelConfigRepo(db).load(user_session.user_id)
+    session: SessionState = get_or_create_session(req.session_id, req.provider, user_config=user_config)
 
     cleared = []
 
@@ -382,7 +387,8 @@ async def clear_memory(req: ClearRequest):
 
     # Drop session so next request rebuilds from (now-empty) disk state.
     from memoryweave.api.session import _sessions
-    key = f"{req.session_id}:{req.provider}"
+    user_id = user_config.user_id if user_config else ""
+    key = f"{req.session_id}:{user_id}"
     _sessions.pop(key, None)
 
     return {"cleared": cleared}
