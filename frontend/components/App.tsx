@@ -283,6 +283,8 @@ export default function App(props: { initialTab?: Tab }) {
                 onEntity={onEntityClick}
                 onEntityHover={setHoveredEntity}
                 onCollapse={() => setRightCollapsed(true)}
+                sessionId={sessionId}
+                provider={provider}
               />
             </>
           )}
