@@ -28,8 +28,10 @@ def get_llm(temperature: float = 0.7, provider: str | None = None, user_config: 
     )
 
 
-def get_extraction_llm(provider: str | None = None):
+def get_extraction_llm(provider: str | None = None, user_config: UserModelConfig | None = None):
     """JSON-mode LLM for entity extraction and importance scoring."""
+    if user_config and user_config.provider == "huggingface" and user_config.hf_api_key:
+        return _hf_extraction_llm(api_key=user_config.hf_api_key)
     p = provider or settings.llm_provider
     if p == "huggingface":
         return _hf_extraction_llm()
@@ -56,10 +58,10 @@ def _hf_llm(temperature: float = 0.7, model: str | None = None, api_key: str | N
     return ChatHuggingFace(llm=endpoint)
 
 
-def _hf_extraction_llm():
+def _hf_extraction_llm(api_key: str | None = None):
     endpoint = HuggingFaceEndpoint(
         repo_id=settings.hf_extraction_model,
-        huggingfacehub_api_token=settings.hf_api_key or None,
+        huggingfacehub_api_token=api_key or settings.hf_api_key or None,
         temperature=0,
         max_new_tokens=512,
         task="text-generation",

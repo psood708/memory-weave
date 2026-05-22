@@ -4,7 +4,7 @@ import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, Query
+from fastapi import Depends, FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage
@@ -12,7 +12,10 @@ from pydantic import BaseModel
 
 import aiosqlite
 
-from memoryweave.db.database import init_db
+from memoryweave.auth.models import UserSession
+from memoryweave.auth.session import verify_session
+from memoryweave.db.database import init_db, get_db
+from memoryweave.models.config_repo import ModelConfigRepo
 from memoryweave.api.eval_routes import router as eval_router
 from memoryweave.eval.bus import EvalEventBus
 from memoryweave.eval.judges.heuristic_judge import HeuristicJudge
@@ -117,11 +120,16 @@ def _sse(event: str, data: dict) -> str:
 # ── POST /api/chat/stream ─────────────────────────────────────────────────────
 
 @app.post("/api/chat/stream")
-async def chat_stream(req: ChatRequest):
+async def chat_stream(
+    req: ChatRequest,
+    user_session: UserSession = Depends(verify_session),
+    db: aiosqlite.Connection = Depends(get_db),
+):
     """Stream agent steps and LLM tokens as Server-Sent Events."""
+    user_config = await ModelConfigRepo(db).load(user_session.user_id)
 
     async def generate():
-        session: SessionState = get_or_create_session(req.session_id, req.provider)
+        session: SessionState = get_or_create_session(req.session_id, req.provider, user_config=user_config)
         t_start = time.perf_counter()
 
         # Launch graph.invoke in background immediately — don't wait for it yet.
@@ -228,8 +236,14 @@ def _map_entity_type(node_type: str) -> str:
 
 
 @app.get("/api/memory", response_model=MemoryResponse)
-async def get_memory(session_id: str = Query(...), provider: str = Query(default="ollama")):
-    session: SessionState = get_or_create_session(session_id, provider)
+async def get_memory(
+    session_id: str = Query(...),
+    provider: str = Query(default="ollama"),
+    user_session: UserSession = Depends(verify_session),
+    db: aiosqlite.Connection = Depends(get_db),
+):
+    user_config = await ModelConfigRepo(db).load(user_session.user_id)
+    session: SessionState = get_or_create_session(session_id, provider, user_config=user_config)
 
     # Working turns
     working_turns: list[WorkingTurn] = []

@@ -219,14 +219,14 @@ def build_graph_with_state(session_id: str | None = None) -> GraphWithAgents:
     return GraphWithAgents(graph=compiled, working=working, episodic=episodic, kg=kg)
 
 
-def build_read_graph_with_state(session_id: str | None = None, provider: str | None = None) -> GraphWithAgents:
+def build_read_graph_with_state(session_id: str | None = None, provider: str | None = None, user_config=None) -> GraphWithAgents:
     """Read-only graph: retrieval + conversational only, no write_node.
     Use for the API hot path; fire writes separately in a background task."""
     sid = session_id or str(uuid.uuid4())
     working = WorkingMemoryAgent()
     episodic = EpisodicMemoryAgent(session_id=sid)
-    kg = KGAgent(provider=provider)
-    llm = get_llm(provider=provider)
+    kg = KGAgent(provider=provider, user_config=user_config)
+    llm = get_llm(provider=provider, user_config=user_config)
 
     def working_memory_node(state: MemoryWeaveState) -> dict:
         return {"working_context": working.format_for_context()}

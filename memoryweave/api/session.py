@@ -74,11 +74,12 @@ def clear_sessions() -> int:
     return count
 
 
-def get_or_create_session(session_id: str, provider: str = "ollama") -> SessionState:
-    """Return the existing session or create a new one. Provider is part of the key."""
-    key = f"{session_id}:{provider}"
+def get_or_create_session(session_id: str, provider: str = "ollama", user_config=None) -> SessionState:
+    """Return the existing session or create a new one. Keyed per user so configs don't bleed across accounts."""
+    user_id = user_config.user_id if user_config else ""
+    key = f"{session_id}:{provider}:{user_id}"
     if key not in _sessions:
-        bundle: GraphWithAgents = build_read_graph_with_state(session_id, provider=provider)
+        bundle: GraphWithAgents = build_read_graph_with_state(session_id, provider=provider, user_config=user_config)
         _sessions[key] = SessionState(
             session_id=session_id,
             provider=provider,
