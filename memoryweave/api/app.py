@@ -372,7 +372,13 @@ async def clear_memory(
     user_session: UserSession = Depends(verify_session),
     db: aiosqlite.Connection = Depends(get_db),
 ):
-    """Wipe stored memory for a session. target controls what gets cleared."""
+    """Wipe stored memory for a session. Ownership-verified: only the session owner can clear."""
+    # Verify ownership — reject if session is registered to a different user
+    cur = await db.execute("SELECT user_id FROM sessions WHERE id = ?", (req.session_id,))
+    row = await cur.fetchone()
+    if row and row["user_id"] and row["user_id"] != user_session.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to clear this session")
+
     user_config = await ModelConfigRepo(db).load(user_session.user_id)
     session: SessionState = get_or_create_session(req.session_id, req.provider, user_config=user_config)
 
@@ -389,6 +395,12 @@ async def clear_memory(
     if req.target in ("all", "kg"):
         session.kg.store.clear()
         cleared.append("kg")
+
+    if req.target == "all":
+        await db.execute("DELETE FROM turn_metrics WHERE session_id = ?", (req.session_id,))
+        await db.execute("DELETE FROM sessions WHERE id = ?", (req.session_id,))
+        await db.commit()
+        cleared.append("eval")
 
     # Drop session so next request rebuilds from (now-empty) disk state.
     from memoryweave.api.session import _sessions
