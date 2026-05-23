@@ -42,9 +42,8 @@ class NaiveBufferTracker:
         self._total = 0
 
     def add_turn(self, user_msg: str, assistant_msg: str) -> int:
-        tokens = _count_tokens(user_msg) + _count_tokens(assistant_msg)
-        self._total += tokens
-        return tokens
+        self._total += _count_tokens(user_msg) + _count_tokens(assistant_msg)
+        return self._total
 
     def total_tokens(self) -> int:
         return self._total
@@ -73,11 +72,15 @@ class TokenMetricsWorker:
                 if naive_tokens > 0 else 0.0
             )
 
-            kg_contributed, kg_distance = compute_kg_contribution(
-                event.episode_embeddings,
-                event.kg_embedding,
-                threshold=settings.kg_contribution_threshold,
-            )
+            if event.episode_embeddings and event.kg_embedding:
+                kg_contributed, kg_distance = compute_kg_contribution(
+                    event.episode_embeddings,
+                    event.kg_embedding,
+                    threshold=settings.kg_contribution_threshold,
+                )
+            else:
+                kg_contributed = bool(event.kg_texts)
+                kg_distance = 0.0 if kg_contributed else 1.0
 
             turn_id = str(uuid.uuid4())
             turn = TurnMetrics(

@@ -116,7 +116,7 @@ export default function EvalDashboard({ sessionId, memoryState }: Props) {
                 ● Judge {health.judge_status === 'active' ? 'active' : 'circuit open'}
               </span>
             )}
-            <button className="icon-btn" title="Refresh metrics" onClick={load}>
+            <button className="icon-btn" data-tooltip="Refresh metrics" onClick={load}>
               <Icon name="refresh" size={13} />
             </button>
           </div>

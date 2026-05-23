@@ -15,6 +15,10 @@ class SQLiteMetricsRepository(MetricsRepository):
 
     async def write_turn(self, turn: TurnMetrics) -> None:
         await self._db.execute(
+            "INSERT OR IGNORE INTO sessions (id, turn_count) VALUES (?, 0)",
+            (turn.session_id,),
+        )
+        await self._db.execute(
             """
             INSERT INTO turn_metrics (
                 id, session_id, turn_number, timestamp,

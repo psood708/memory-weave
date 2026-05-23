@@ -323,9 +323,9 @@ function Composer({ budget, onSend }: { budget: Budget; onSend?: (text: string, 
             placeholder={placeholder}
           />
           <div className="composer-tools">
-            <button className="icon-btn" title="Attach"><Icon name="clip" size={14} /></button>
+            <button className="icon-btn" data-tooltip="Attach file"><Icon name="clip" size={14} /></button>
             <div className="budget-pill-wrap">
-              <button className={`budget-pill ${showBudget ? 'open' : ''}`} onClick={() => setShowBudget(o => !o)} title="Context budget">
+              <button className={`budget-pill ${showBudget ? 'open' : ''}`} onClick={() => setShowBudget(o => !o)} data-tooltip="Context budget">
                 <span className="bp-dot" />
                 <span>{pct}%</span>
               </button>
@@ -383,7 +383,7 @@ export default function Conversation({
           <span className="meta">session · {conv.length} turns</span>
         </div>
         <div className="conv-actions">
-          <button className="icon-btn" title="Settings" onClick={() => setShowSettings(true)}>
+          <button className="icon-btn" data-tooltip="Settings" onClick={() => setShowSettings(true)}>
             <Icon name="cog" size={14} />
           </button>
         </div>

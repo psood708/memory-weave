@@ -177,7 +177,7 @@ function NodeImpactCard({ node, edges, entities, onClose }: {
           <span className="nc-name">{node.name}</span>
           <span className="nc-type">{node.type}</span>
         </div>
-        <button className="icon-btn nc-close" onClick={onClose}><Icon name="close" size={11} /></button>
+        <button className="icon-btn nc-close" data-tooltip="Close" onClick={onClose}><Icon name="close" size={11} /></button>
       </div>
       {node.description && <div className="nc-desc">{node.description}</div>}
       <div className="nc-stats">
@@ -504,10 +504,10 @@ export default function GraphPanel({
         ))}
       </div>
       <div className="graph-controls">
-        <button className="gc-btn" onClick={() => setZoom(z => Math.min(4, z * 1.2))} title="Zoom in"><Icon name="plus" size={12} /></button>
-        <button className="gc-btn" onClick={() => setZoom(z => Math.max(0.3, z / 1.2))} title="Zoom out"><Icon name="minus" size={12} /></button>
+        <button className="gc-btn" onClick={() => setZoom(z => Math.min(4, z * 1.2))} data-tooltip="Zoom in"><Icon name="plus" size={12} /></button>
+        <button className="gc-btn" onClick={() => setZoom(z => Math.max(0.3, z / 1.2))} data-tooltip="Zoom out"><Icon name="minus" size={12} /></button>
         <div className="sep" />
-        <button className="gc-btn" onClick={resetView} title="Reset view"><Icon name="focus" size={12} /></button>
+        <button className="gc-btn" onClick={resetView} data-tooltip="Reset view"><Icon name="focus" size={12} /></button>
       </div>
     </div>
   );
@@ -517,7 +517,7 @@ export default function GraphPanel({
     <div className="gc-settings-wrap" onClick={e => e.stopPropagation()}>
       <button
         className="icon-btn"
-        title="Export graph"
+        data-tooltip="Export graph"
         onClick={() => setShowExport(v => !v)}
       >
         <Icon name="cog" size={13} />
@@ -563,8 +563,8 @@ export default function GraphPanel({
             </div>
             <div className="gfs-spacer" />
             {renderExportMenu()}
-            <button className="icon-btn" onClick={resetView} title="Reset view"><Icon name="focus" size={13} /></button>
-            <button className="icon-btn" title="Exit fullscreen" onClick={() => setFullscreen(false)}><Icon name="close" size={14} /></button>
+            <button className="icon-btn" onClick={resetView} data-tooltip="Reset view"><Icon name="focus" size={13} /></button>
+            <button className="icon-btn" data-tooltip="Exit fullscreen" onClick={() => setFullscreen(false)}><Icon name="close" size={14} /></button>
           </div>
 
           <div className="gfs-canvas">
@@ -642,11 +642,11 @@ export default function GraphPanel({
         <span className="panel-title">Knowledge Graph</span>
         <div className="panel-actions">
           {renderExportMenu()}
-          <button className="icon-btn" title="Fullscreen" onClick={() => setFullscreen(true)}>
+          <button className="icon-btn" data-tooltip="Fullscreen" onClick={() => setFullscreen(true)}>
             <Icon name="expand" size={13} />
           </button>
           {onCollapse && (
-            <button className="icon-btn" title="Hide panel" onClick={onCollapse}>
+            <button className="icon-btn" data-tooltip="Hide panel" onClick={onCollapse}>
               <Icon name="panel-right" size={13} />
             </button>
           )}

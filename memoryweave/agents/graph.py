@@ -277,9 +277,10 @@ def build_read_graph_with_state(session_id: str | None = None, provider: str | N
     """Read-only graph: retrieval + conversational only, no write_node.
     Use for the API hot path; fire writes separately in a background task."""
     sid = session_id or str(uuid.uuid4())
+    user_id = user_config.user_id if user_config else ""
     working = WorkingMemoryAgent()
     episodic = EpisodicMemoryAgent(session_id=sid)
-    kg = KGAgent(provider=provider, user_config=user_config)
+    kg = KGAgent(provider=provider, user_config=user_config, user_id=user_id)
     llm = get_llm(provider=provider, user_config=user_config)
     compiled = _compile_graph(working, episodic, kg, llm)
     return GraphWithAgents(graph=compiled, working=working, episodic=episodic, kg=kg)

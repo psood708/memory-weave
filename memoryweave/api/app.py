@@ -4,7 +4,7 @@ import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import Depends, FastAPI, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage
@@ -211,7 +211,12 @@ async def chat_stream(
         # In memory mode: write to episodic + KG and notify frontend.
         # In question mode: retrieval already ran; skip writes so graph stays clean.
         if req.mode != "question":
-            await session.write_turn_async(req.message, response_text)
+            await session.write_turn_async(
+                req.message,
+                response_text,
+                total_latency_ms=int(latency * 1000),
+                kg_context=kg_context,
+            )
             yield _sse("memory_updated", {})
 
     return StreamingResponse(

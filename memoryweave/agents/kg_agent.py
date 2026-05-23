@@ -1,11 +1,22 @@
 import json
 import re
+from pathlib import Path
+
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, field_validator
 
 from memoryweave.core.config import settings
 from memoryweave.core.llm import extract_text, get_extraction_llm
 from memoryweave.memory.kg_store import KnowledgeGraphStore
+
+
+def _kg_path_for_user(user_id: str) -> str:
+    """Return the KG JSON path for a given user, creating the directory if needed."""
+    if not user_id:
+        return settings.kg_store_path
+    base = Path(settings.kg_store_path).parent.parent / "users" / user_id
+    base.mkdir(parents=True, exist_ok=True)
+    return str(base / "kg_store.json")
 
 
 def _parse_llm_json(raw: str) -> dict:
@@ -97,8 +108,8 @@ class FusedResult(BaseModel):
 class KGAgent:
     """Extracts entities from conversation turns and manages KG read/write paths."""
 
-    def __init__(self, store: KnowledgeGraphStore | None = None, provider: str | None = None, user_config=None):
-        self._store = store or KnowledgeGraphStore(persist_path=settings.kg_store_path)
+    def __init__(self, store: KnowledgeGraphStore | None = None, provider: str | None = None, user_config=None, user_id: str = ""):
+        self._store = store or KnowledgeGraphStore(persist_path=_kg_path_for_user(user_id))
         self._extraction_llm = get_extraction_llm(provider=provider, user_config=user_config)
 
     def fused_extract(self, text: str) -> FusedResult:

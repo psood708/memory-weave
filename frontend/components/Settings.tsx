@@ -89,7 +89,7 @@ export default function Settings({
       <div className="settings-panel">
         <div className="settings-head">
           <span className="settings-title">Settings</span>
-          <button className="icon-btn" onClick={onClose}><Icon name="close" size={13} /></button>
+          <button className="icon-btn" data-tooltip="Close" onClick={onClose}><Icon name="close" size={13} /></button>
         </div>
 
         <div className="settings-body">

@@ -1,8 +1,11 @@
 import asyncio
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from langchain_core.messages import AIMessage, HumanMessage
+
+_logger = logging.getLogger(__name__)
 
 from memoryweave.agents.episodic_memory import EpisodicMemoryAgent
 from memoryweave.agents.graph import GraphWithAgents, build_read_graph_with_state
@@ -30,7 +33,14 @@ class SessionState:
         self.kg._extraction_llm = get_extraction_llm(provider=provider, user_config=user_config)
         self.graph = _compile_graph(self.working, self.episodic, self.kg, llm)
 
-    async def write_turn_async(self, user_input: str, response: str) -> None:
+    async def write_turn_async(
+        self,
+        user_input: str,
+        response: str,
+        *,
+        total_latency_ms: int = 0,
+        kg_context: str = "",
+    ) -> None:
         """Run memory-write operations in the background after the response is streamed."""
         msgs = [HumanMessage(content=user_input), AIMessage(content=response)]
         for msg in msgs:
@@ -47,6 +57,7 @@ class SessionState:
             from memoryweave.eval.events import TurnEvent
 
             retrieved_episodes = self.episodic.retrieve(user_input)
+            kg_texts = [ln.strip() for ln in kg_context.splitlines() if ln.strip()]
             event = TurnEvent(
                 session_id=self.session_id,
                 user_id=getattr(self, "user_id", ""),
@@ -54,22 +65,18 @@ class SessionState:
                 question=user_input,
                 answer=response,
                 episode_texts=[ep.content for ep in retrieved_episodes],
-                kg_texts=[],
-                episode_embeddings=[
-                    ep.embedding
-                    for ep in retrieved_episodes
-                    if getattr(ep, "embedding", None)
-                ],
+                kg_texts=kg_texts,
+                episode_embeddings=[],
                 kg_embedding=[],
                 system_tokens=self.last_token_estimate,
                 naive_tokens=self.last_token_estimate,
                 retrieval_latency_ms=0,
-                total_latency_ms=0,
+                total_latency_ms=total_latency_ms,
                 timestamp=datetime.now(timezone.utc),
             )
             eval_bus.emit(event)
         except Exception:
-            pass
+            _logger.exception("eval_bus emit failed — metrics skipped for turn %d", self.turn_count)
 
 
 # In-memory session registry: "{session_id}:{user_id}" -> SessionState
