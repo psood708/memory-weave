@@ -1,0 +1,43 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist ChromaDB, KG JSON, and eval SQLite across restarts
+      - ./data/prod:/app/data/prod
+    # Load secrets from .env.production (gitignored — copy from .env.example and fill in)
+    env_file:
+      - path: .env.production
+        required: false
+    environment:
+      APP_ENV: production
+      CHROMA_PATH: /app/data/prod/chroma
+      KG_STORE_PATH: /app/data/prod/kg_store.json
+      EVAL_DB_PATH: /app/data/prod/metrics.db
+      # Reach Ollama on the host; on Linux replace with: http://172.17.0.1:11434
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      CORS_ORIGINS: '["http://localhost:3000"]'
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        # Baked into the Next.js bundle — must point to where the browser reaches the API
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped

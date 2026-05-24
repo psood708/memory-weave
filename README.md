@@ -136,20 +136,41 @@ KG edges:  weight(t) = weight × decay_factor         prune if < 0.10
 
 ## 🚀 Quickstart
 
-### Prerequisites
+### Option A — Docker Compose (recommended)
 
-- [Ollama](https://ollama.com) installed and running
-- Both models pulled:
-  ```bash
-  ollama pull qwen3.5:9b
-  ollama pull gemma4:e2b
-  ```
-- [uv](https://docs.astral.sh/uv/) installed
-
-### Setup
+**Prerequisites:** [Docker](https://www.docker.com/) + [Ollama](https://ollama.com) running on the host.
 
 ```bash
+# Pull the models Ollama will serve
+ollama pull qwen3.5:9b
+ollama pull gemma4:e2b
+
 # Clone and enter the project
+cd proj1/
+
+# Configure secrets (auth, LangSmith, etc.)
+cp .env.example .env.production
+# Edit .env.production and fill in AUTH_SECRET, ENCRYPTION_KEY, and any optional keys
+
+# Start both services
+docker compose up --build
+```
+
+Open `http://localhost:3000` — the UI will be live. The API is at `http://localhost:8000`.
+
+> **Linux note:** Ollama is reached via `host.docker.internal`. On Linux this may need to be set to `172.17.0.1` in `docker-compose.yml` if your Docker network uses the default bridge.
+
+---
+
+### Option B — Local development
+
+**Prerequisites:** [Ollama](https://ollama.com) + [uv](https://docs.astral.sh/uv/) installed.
+
+```bash
+# Pull models
+ollama pull qwen3.5:9b
+ollama pull gemma4:e2b
+
 cd proj1/
 
 # Install dependencies
@@ -157,16 +178,22 @@ uv sync
 
 # Configure environment
 cp .env.example .env
-# Edit .env if you want LangSmith tracing (optional)
+# Edit .env — set AUTH_SECRET and ENCRYPTION_KEY at minimum
+
+# Start the API
+uv run python run_api.py
+
+# In another terminal, start the frontend
+cd frontend && npm install && npm run dev
 ```
 
-### Run
+Open `http://localhost:3000`.
+
+### CLI (no UI)
 
 ```bash
 uv run python cli.py
 ```
-
-### CLI Commands
 
 | Input | Action |
 |---|---|
