@@ -1,13 +1,42 @@
+import os
 import pytest
-import aiosqlite
-from memoryweave.db.database import init_db, get_db
+import asyncpg
 
-@pytest.mark.asyncio
-async def test_init_db_creates_users_table(tmp_path, monkeypatch):
-    db_path = str(tmp_path / "test.db")
-    monkeypatch.setattr("memoryweave.db.database._db_path", lambda: db_path)
-    await init_db()
-    async with aiosqlite.connect(db_path) as db:
-        cur = await db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
-        row = await cur.fetchone()
+pytestmark = pytest.mark.asyncio
+
+
+@pytest.fixture(scope="module")
+def database_url():
+    url = os.getenv("DATABASE_URL")
+    if not url:
+        pytest.skip("DATABASE_URL not set — skipping PostgreSQL integration tests")
+    return url
+
+
+@pytest.fixture
+async def pool(database_url):
+    p = await asyncpg.create_pool(dsn=database_url, min_size=1, max_size=2)
+    yield p
+    await p.close()
+
+
+async def test_init_db_creates_users_table(pool):
+    from memoryweave.db.postgres import _MIGRATIONS_DIR
+    async with pool.acquire() as conn:
+        for migration in sorted(_MIGRATIONS_DIR.glob("*.sql")):
+            await conn.execute(migration.read_text())
+        row = await conn.fetchrow(
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_schema = 'public' AND table_name = 'users'"
+        )
+    assert row is not None
+
+
+async def test_init_db_creates_knowledge_graphs_table(pool):
+    from memoryweave.db.postgres import _MIGRATIONS_DIR
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_schema = 'public' AND table_name = 'knowledge_graphs'"
+        )
     assert row is not None

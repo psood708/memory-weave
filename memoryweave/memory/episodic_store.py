@@ -45,10 +45,16 @@ class EpisodicStore:
     def __init__(self, collection_name: str = "episodes", persist_dir: str = ".chroma"):
         from memoryweave.core.config import settings as _settings
         self._settings = _settings
-        self._client = chromadb.PersistentClient(
-            path=persist_dir,
-            settings=ChromaSettings(anonymized_telemetry=False),
-        )
+        if _settings.chroma_host:
+            self._client = chromadb.HttpClient(
+                host=_settings.chroma_host,
+                port=_settings.chroma_port,
+            )
+        else:
+            self._client = chromadb.PersistentClient(
+                path=persist_dir,
+                settings=ChromaSettings(anonymized_telemetry=False),
+            )
         self._collection = self._client.get_or_create_collection(
             name=collection_name,
             metadata={"hnsw:space": "cosine"},

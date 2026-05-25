@@ -1,25 +1,45 @@
-import asyncio
+import os
 import pytest
-import aiosqlite
+import asyncpg
 from datetime import datetime, timezone
-from memoryweave.db.database import init_db
-from memoryweave.eval.repository.sqlite_repo import SQLiteMetricsRepository
-from memoryweave.eval.repository.base import TurnMetrics, JudgeResult, SessionSummary
+
+from memoryweave.eval.repository.postgres_repo import PostgresMetricsRepository
+from memoryweave.eval.repository.base import TurnMetrics, JudgeResult
+
+pytestmark = pytest.mark.asyncio
+
+
+@pytest.fixture(scope="module")
+def database_url():
+    url = os.getenv("DATABASE_URL")
+    if not url:
+        pytest.skip("DATABASE_URL not set — skipping PostgreSQL integration tests")
+    return url
+
 
 @pytest.fixture
-async def repo(tmp_path, monkeypatch):
-    db_path = str(tmp_path / "test.db")
-    monkeypatch.setattr("memoryweave.db.database._db_path", lambda: db_path)
-    await init_db()
-    async with aiosqlite.connect(db_path) as db:
-        db.row_factory = aiosqlite.Row
-        await db.execute("INSERT INTO users (id, google_sub, email) VALUES ('u1','g1','a@b.com')")
-        await db.execute("INSERT INTO sessions (id, user_id) VALUES ('sess1', 'u1')")
-        await db.commit()
-        yield SQLiteMetricsRepository(db)
+async def pool(database_url):
+    p = await asyncpg.create_pool(dsn=database_url, min_size=1, max_size=2)
+    from memoryweave.db.postgres import _MIGRATIONS_DIR
+    async with p.acquire() as conn:
+        for migration in sorted(_MIGRATIONS_DIR.glob("*.sql")):
+            await conn.execute(migration.read_text())
+        await conn.execute(
+            "INSERT INTO users (id, google_sub, email) VALUES ('u1','g1','a@b.com') ON CONFLICT DO NOTHING"
+        )
+        await conn.execute(
+            "INSERT INTO sessions (id, user_id) VALUES ('sess1', 'u1') ON CONFLICT DO NOTHING"
+        )
+    yield p
+    async with p.acquire() as conn:
+        await conn.execute("DELETE FROM turn_metrics WHERE session_id = 'sess1'")
+        await conn.execute("DELETE FROM sessions WHERE id = 'sess1'")
+        await conn.execute("DELETE FROM users WHERE id = 'u1'")
+    await p.close()
 
-@pytest.mark.asyncio
-async def test_write_and_read_turn(repo):
+
+async def test_write_and_read_turn(pool):
+    repo = PostgresMetricsRepository(pool)
     turn = TurnMetrics(
         id="t1", session_id="sess1", turn_number=1,
         timestamp=datetime.now(timezone.utc),
@@ -32,8 +52,9 @@ async def test_write_and_read_turn(repo):
     assert summary.turn_count == 1
     assert abs(summary.avg_token_efficiency - 0.8) < 0.001
 
-@pytest.mark.asyncio
-async def test_patch_judge_score(repo):
+
+async def test_patch_judge_score(pool):
+    repo = PostgresMetricsRepository(pool)
     turn = TurnMetrics(
         id="t2", session_id="sess1", turn_number=2,
         timestamp=datetime.now(timezone.utc),

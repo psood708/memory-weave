@@ -1,6 +1,6 @@
 import asyncio
 
-import aiosqlite
+import asyncpg
 from fastapi import APIRouter, Depends, HTTPException
 from huggingface_hub import HfApi
 from pydantic import BaseModel
@@ -32,7 +32,7 @@ class ModelConfigRequest(BaseModel):
 async def save_model_config(
     req: ModelConfigRequest,
     session: UserSession = Depends(verify_session),
-    db: aiosqlite.Connection = Depends(get_db),
+    db: asyncpg.Connection = Depends(get_db),
 ):
     if req.provider in ("huggingface", "custom") and req.hf_api_key:
         try:
@@ -56,7 +56,7 @@ async def save_model_config(
 @router.get("/user/model-config")
 async def get_model_config(
     session: UserSession = Depends(verify_session),
-    db: aiosqlite.Connection = Depends(get_db),
+    db: asyncpg.Connection = Depends(get_db),
 ):
     repo = ModelConfigRepo(db)
     config = await repo.load(session.user_id)

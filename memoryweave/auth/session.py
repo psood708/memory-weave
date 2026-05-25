@@ -1,4 +1,4 @@
-import aiosqlite
+import asyncpg
 from fastapi import Depends, HTTPException, Request
 from jose import JWTError, jwt
 
@@ -11,7 +11,7 @@ _COOKIE_NAME = "authjs.session-token"
 
 async def verify_session(
     request: Request,
-    db: aiosqlite.Connection = Depends(get_db),
+    db: asyncpg.Connection = Depends(get_db),
 ) -> UserSession:
     token = request.cookies.get(_COOKIE_NAME)
     if not token:
@@ -25,15 +25,15 @@ async def verify_session(
     email: str = payload.get("email", "")
     name: str = payload.get("name", "")
 
-    cur = await db.execute("SELECT id, email, name FROM users WHERE google_sub = ?", (google_sub,))
-    row = await cur.fetchone()
+    row = await db.fetchrow(
+        "SELECT id, email, name FROM users WHERE google_sub = $1", google_sub
+    )
     if row is None:
         user_id = new_uuid()
         await db.execute(
-            "INSERT INTO users (id, google_sub, email, name) VALUES (?, ?, ?, ?)",
-            (user_id, google_sub, email, name),
+            "INSERT INTO users (id, google_sub, email, name) VALUES ($1, $2, $3, $4)",
+            user_id, google_sub, email, name,
         )
-        await db.commit()
     else:
         user_id = row["id"]
 

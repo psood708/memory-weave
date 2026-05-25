@@ -3,5 +3,5 @@ CREATE TABLE IF NOT EXISTS users (
     google_sub  TEXT UNIQUE NOT NULL,
     email       TEXT NOT NULL,
     name        TEXT,
-    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at  TIMESTAMPTZ DEFAULT NOW()
 );

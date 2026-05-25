@@ -52,6 +52,16 @@ class Settings(BaseSettings):
     kg_store_path: str = "./data/dev/kg_store.json"
     eval_db_path: str = "./data/dev/metrics.db"
 
+    # PostgreSQL
+    database_url: str = "postgresql://memoryweave:memoryweave@localhost:5432/memoryweave"
+
+    # ChromaDB server mode (leave empty to use local PersistentClient)
+    chroma_host: str = ""
+    chroma_port: int = 8000
+
+    # Redis session cache (leave empty to disable)
+    redis_url: str = ""
+
     # API
     cors_origins: list[str] = ["*"]
 

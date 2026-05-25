@@ -1,6 +1,7 @@
 import time
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
@@ -94,7 +95,7 @@ def build_graph(session_id: str | None = None):
         print(f"[latency] fused_extract_llm: {time.perf_counter() - t_fused:.3f}s")
 
         episode = episodic.write(msgs, importance_score=fused.importance_score)
-        entity_names = kg.update_graph(fused, episode_id=episode.id if episode else "")
+        entity_names = kg.update_graph_sync(fused, episode_id=episode.id if episode else "")
         if episode and entity_names:
             episodic.update_entity_links(episode.id, entity_names)
         print(f"[latency] write_total: {time.perf_counter() - t0:.3f}s")
@@ -191,7 +192,7 @@ def build_graph_with_state(session_id: str | None = None) -> GraphWithAgents:
         print(f"[latency] fused_extract_llm: {time.perf_counter() - t_fused:.3f}s")
 
         episode = episodic.write(msgs, importance_score=fused.importance_score)
-        entity_names = kg.update_graph(fused, episode_id=episode.id if episode else "")
+        entity_names = kg.update_graph_sync(fused, episode_id=episode.id if episode else "")
         if episode and entity_names:
             episodic.update_entity_links(episode.id, entity_names)
         print(f"[latency] write_total: {time.perf_counter() - t0:.3f}s")
@@ -273,14 +274,34 @@ def _compile_graph(working: WorkingMemoryAgent, episodic: EpisodicMemoryAgent, k
     return builder.compile()
 
 
-def build_read_graph_with_state(session_id: str | None = None, provider: str | None = None, user_config=None) -> GraphWithAgents:
+async def build_read_graph_with_state(
+    session_id: str | None = None,
+    provider: str | None = None,
+    user_config=None,
+    kg_backend=None,
+) -> GraphWithAgents:
     """Read-only graph: retrieval + conversational only, no write_node.
     Use for the API hot path; fire writes separately in a background task."""
+    from memoryweave.memory.kg_backend import FileKGBackend, PostgresKGBackend
+    from memoryweave.memory.kg_store import KnowledgeGraphStore
+
     sid = session_id or str(uuid.uuid4())
     user_id = user_config.user_id if user_config else ""
     working = WorkingMemoryAgent()
     episodic = EpisodicMemoryAgent(session_id=sid)
-    kg = KGAgent(provider=provider, user_config=user_config, user_id=user_id)
+
+    if kg_backend is None:
+        try:
+            from memoryweave.db.postgres import get_pool
+            pool = get_pool()
+            kg_backend = PostgresKGBackend(pool) if pool is not None else FileKGBackend(str(Path(settings.kg_store_path).parent))
+        except Exception:
+            kg_backend = FileKGBackend(str(Path(settings.kg_store_path).parent))
+
+    kg_store = KnowledgeGraphStore(backend=kg_backend, user_id=user_id)
+    await kg_store.load()
+    kg = KGAgent(store=kg_store, provider=provider, user_config=user_config)
+
     llm = get_llm(provider=provider, user_config=user_config)
     compiled = _compile_graph(working, episodic, kg, llm)
     return GraphWithAgents(graph=compiled, working=working, episodic=episodic, kg=kg)

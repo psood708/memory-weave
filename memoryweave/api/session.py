@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -17,7 +17,7 @@ from memoryweave.agents.working_memory import WorkingMemoryAgent
 class SessionState:
     session_id: str
     provider: str
-    graph: object  # compiled read-only LangGraph (no write_node)
+    graph: object  # compiled read-only LangGraph
     working: WorkingMemoryAgent
     episodic: EpisodicMemoryAgent
     kg: KGAgent
@@ -25,7 +25,7 @@ class SessionState:
     turn_count: int = 0
 
     def update_provider(self, provider: str, user_config=None) -> None:
-        """Swap the inference LLM for a different provider while keeping all memory intact."""
+        """Swap the inference LLM while keeping all memory intact."""
         from memoryweave.agents.graph import _compile_graph
         from memoryweave.core.llm import get_extraction_llm, get_llm
         self.provider = provider
@@ -48,7 +48,7 @@ class SessionState:
         turn_content = f"{user_input}\n{response}"
         fused = await asyncio.to_thread(self.kg.fused_extract, turn_content)
         episode = self.episodic.write(msgs, importance_score=fused.importance_score)
-        entity_names = self.kg.update_graph(fused, episode_id=episode.id if episode else "")
+        entity_names = await self.kg.update_graph(fused, episode_id=episode.id if episode else "")
         if episode and entity_names:
             self.episodic.update_entity_links(episode.id, entity_names)
 
@@ -80,24 +80,26 @@ class SessionState:
 
 
 # In-memory session registry: "{session_id}:{user_id}" -> SessionState
-# Provider is NOT part of the key — memory is shared across provider switches.
 _sessions: dict[str, SessionState] = {}
 
 
 def clear_sessions() -> int:
-    """Flush all in-memory sessions so the next request reloads from disk."""
+    """Flush all in-memory sessions so the next request reloads from storage."""
     count = len(_sessions)
     _sessions.clear()
     return count
 
 
-def get_or_create_session(session_id: str, provider: str = "ollama", user_config=None) -> SessionState:
-    """Return the existing session or create a new one.
-    Keyed by session+user only — provider switches update the LLM without touching memory."""
+async def get_or_create_session(
+    session_id: str, provider: str = "ollama", user_config=None
+) -> SessionState:
+    """Return existing session or build a new one, loading KG from PostgreSQL."""
     user_id = user_config.user_id if user_config else ""
     key = f"{session_id}:{user_id}"
     if key not in _sessions:
-        bundle: GraphWithAgents = build_read_graph_with_state(session_id, provider=provider, user_config=user_config)
+        bundle: GraphWithAgents = await build_read_graph_with_state(
+            session_id, provider=provider, user_config=user_config
+        )
         _sessions[key] = SessionState(
             session_id=session_id,
             provider=provider,

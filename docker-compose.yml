@@ -1,23 +1,53 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: memoryweave
+      POSTGRES_PASSWORD: memoryweave
+      POSTGRES_DB: memoryweave
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U memoryweave"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  chroma:
+    image: chromadb/chroma:latest
+    volumes:
+      - chroma_data:/chroma/chroma
+    ports:
+      - "8001:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   api:
     build:
       context: .
       dockerfile: Dockerfile.api
     ports:
       - "8000:8000"
-    volumes:
-      # Persist ChromaDB, KG JSON, and eval SQLite across restarts
-      - ./data/prod:/app/data/prod
-    # Load secrets from .env.production (gitignored — copy from .env.example and fill in)
+    depends_on:
+      postgres:
+        condition: service_healthy
+      chroma:
+        condition: service_healthy
     env_file:
       - path: .env.production
         required: false
     environment:
       APP_ENV: production
-      CHROMA_PATH: /app/data/prod/chroma
-      KG_STORE_PATH: /app/data/prod/kg_store.json
-      EVAL_DB_PATH: /app/data/prod/metrics.db
-      # Reach Ollama on the host; on Linux replace with: http://172.17.0.1:11434
+      DATABASE_URL: postgresql://memoryweave:memoryweave@postgres:5432/memoryweave
+      CHROMA_HOST: chroma
+      CHROMA_PORT: "8000"
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       CORS_ORIGINS: '["http://localhost:3000"]'
     restart: unless-stopped
@@ -33,7 +63,6 @@ services:
       context: .
       dockerfile: Dockerfile.frontend
       args:
-        # Baked into the Next.js bundle — must point to where the browser reaches the API
         NEXT_PUBLIC_API_URL: http://localhost:8000
     ports:
       - "3000:3000"
@@ -41,3 +70,7 @@ services:
       api:
         condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  pg_data:
+  chroma_data:

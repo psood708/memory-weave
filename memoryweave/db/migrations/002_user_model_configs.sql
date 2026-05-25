@@ -4,6 +4,6 @@ CREATE TABLE IF NOT EXISTS user_model_configs (
     chat_model      TEXT,
     embedding_model TEXT,
     judge_model     TEXT,
-    hf_api_key_enc  BLOB,
-    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+    hf_api_key_enc  BYTEA,
+    updated_at      TIMESTAMPTZ DEFAULT NOW()
 );

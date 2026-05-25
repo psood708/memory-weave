@@ -1,21 +1,35 @@
 import heapq
-import json
-import os
 
 import networkx as nx
 
+from memoryweave.memory.kg_backend import KGBackend
+
 
 class KnowledgeGraphStore:
-    """NetworkX DiGraph with weighted traversal, Hebbian updates, and JSON persistence."""
+    """NetworkX DiGraph with weighted traversal, Hebbian updates, and pluggable async persistence."""
 
-    def __init__(self, persist_path: str = "kg_store.json"):
-        self._path = persist_path
-        _dir = os.path.dirname(os.path.abspath(persist_path))
-        _base = os.path.basename(persist_path)
-        self._tmp_path = os.path.join(_dir, f".{_base}.tmp")
+    def __init__(self, backend: KGBackend, user_id: str = ""):
+        self._backend = backend
+        self._user_id = user_id
         self._graph: nx.DiGraph = nx.DiGraph()
         self._call_count: int = 0
-        self.load()
+
+    # ── Persistence ───────────────────────────────────────────────────────────
+
+    async def load(self) -> None:
+        data = await self._backend.load(self._user_id)
+        if data:
+            self._graph = nx.node_link_graph(data, directed=True, multigraph=False)
+        else:
+            self._graph = nx.DiGraph()
+
+    async def save(self) -> None:
+        data = nx.node_link_data(self._graph)
+        await self._backend.save(self._user_id, data)
+
+    async def clear(self) -> None:
+        self._graph = nx.DiGraph()
+        await self._backend.save(self._user_id, nx.node_link_data(self._graph))
 
     # ── Write ops ────────────────────────────────────────────────────────────
 
@@ -113,29 +127,6 @@ class KnowledgeGraphStore:
         if self._call_count % settings.kg_decay_interval == 0:
             self.decay_all()
             self.prune()
-
-    # ── Persistence ───────────────────────────────────────────────────────────
-
-    def save(self) -> None:
-        data = nx.node_link_data(self._graph)
-        with open(self._tmp_path, "w") as f:
-            json.dump(data, f)
-        os.replace(self._tmp_path, self._path)
-
-    def load(self) -> None:
-        if os.path.exists(self._path):
-            with open(self._path) as f:
-                data = json.load(f)
-            self._graph = nx.node_link_graph(data, directed=True, multigraph=False)
-        else:
-            self._graph = nx.DiGraph()
-
-    def clear(self) -> None:
-        """Wipe the in-memory graph and delete the persisted JSON file."""
-        self._graph = nx.DiGraph()
-        for path in (self._path, self._tmp_path):
-            if os.path.exists(path):
-                os.remove(path)
 
     # ── Properties ────────────────────────────────────────────────────────────
 
