@@ -29,6 +29,19 @@ services:
       retries: 5
     restart: unless-stopped
 
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   api:
     build:
       context: .
@@ -40,6 +53,8 @@ services:
         condition: service_healthy
       chroma:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     env_file:
       - path: .env.production
         required: false
@@ -48,6 +63,7 @@ services:
       DATABASE_URL: postgresql://memoryweave:memoryweave@postgres:5432/memoryweave
       CHROMA_HOST: chroma
       CHROMA_PORT: "8000"
+      REDIS_URL: redis://redis:6379
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       CORS_ORIGINS: '["http://localhost:3000"]'
     restart: unless-stopped
@@ -74,3 +90,4 @@ services:
 volumes:
   pg_data:
   chroma_data:
+  redis_data:

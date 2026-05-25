@@ -90,12 +90,21 @@ def clear_sessions() -> int:
     return count
 
 
+_SESSION_TTL = 3600  # 1 hour
+
+
 async def get_or_create_session(
     session_id: str, provider: str = "ollama", user_config=None
 ) -> SessionState:
-    """Return existing session or build a new one, loading KG from PostgreSQL."""
+    """Return existing session or build a new one, loading KG from PostgreSQL.
+    Writes session metadata to Redis (if configured) for cross-instance awareness."""
+    from memoryweave.db.redis_client import get_redis
+    import json as _json
+
     user_id = user_config.user_id if user_config else ""
     key = f"{session_id}:{user_id}"
+    redis_key = f"session_meta:{key}"
+
     if key not in _sessions:
         bundle: GraphWithAgents = await build_read_graph_with_state(
             session_id, provider=provider, user_config=user_config
@@ -108,8 +117,19 @@ async def get_or_create_session(
             episodic=bundle.episodic,
             kg=bundle.kg,
         )
+        r = get_redis()
+        if r is not None:
+            await r.setex(
+                redis_key,
+                _SESSION_TTL,
+                _json.dumps({"provider": provider, "user_id": user_id}),
+            )
     else:
         session = _sessions[key]
         if session.provider != provider:
             session.update_provider(provider, user_config)
+        r = get_redis()
+        if r is not None:
+            await r.expire(redis_key, _SESSION_TTL)
+
     return _sessions[key]

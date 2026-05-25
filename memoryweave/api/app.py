@@ -15,6 +15,7 @@ from memoryweave.auth.models import UserSession
 from memoryweave.auth.session import verify_session
 from memoryweave.db.database import get_db, new_uuid
 from memoryweave.db.postgres import close_pool, get_pool, init_db, init_pool
+from memoryweave.db.redis_client import close_redis, init_redis
 from memoryweave.models.config_repo import ModelConfigRepo
 from memoryweave.api.eval_routes import router as eval_router
 from memoryweave.eval.bus import EvalEventBus
@@ -57,6 +58,7 @@ judge_worker: LLMJudgeWorker = None  # initialized in lifespan
 async def lifespan(app: FastAPI):
     global judge_worker
     await init_pool()
+    await init_redis()
     await init_db()
 
     pool = get_pool()
@@ -88,6 +90,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         consumer_task.cancel()
+        await close_redis()
         await close_pool()
 
 
