@@ -207,17 +207,29 @@ MEMORY_TURNS = [
 ]
 
 
-async def seed_kg(demo_session_id: str, provider: str) -> None:
+async def seed_kg(demo_session_id: str, provider: str, user_id: str = "") -> None:
+    from memoryweave.agents.kg_agent import _kg_path_for_user
+
+    class _FakeUserConfig:
+        pass
+
+    user_config = None
+    if user_id:
+        cfg = _FakeUserConfig()
+        cfg.user_id = user_id  # type: ignore[attr-defined]
+        user_config = cfg
+
+    kg_path = _kg_path_for_user(user_id)
     if provider == "huggingface":
         label = f"huggingface · {settings.hf_model}"
     else:
         label = f"{provider} · {settings.ollama_model}"
     print("\n── Phase 1: KG + Episodic Memory ─────────────────────────────")
     print(f"  Provider : {label}")
-    print(f"  KG path  : {settings.kg_store_path}")
+    print(f"  KG path  : {kg_path}")
     print()
 
-    bundle = build_read_graph_with_state(session_id=demo_session_id, provider=provider)
+    bundle = build_read_graph_with_state(session_id=demo_session_id, provider=provider, user_config=user_config)
     session = SessionState(
         session_id=demo_session_id,
         provider=provider,
@@ -304,6 +316,11 @@ async def main() -> None:
              "Eval metrics are linked to this ID so the dashboard shows them.",
     )
     parser.add_argument(
+        "--user-id",
+        help="Your authenticated user ID. Find it at GET /api/auth/me after logging in. "
+             "Required for KG data to appear in your browser session.",
+    )
+    parser.add_argument(
         "--provider",
         default="ollama",
         choices=["ollama", "huggingface", "custom"],
@@ -318,7 +335,7 @@ async def main() -> None:
 
     # Phase 1: KG + episodic
     if not args.skip_kg:
-        await seed_kg(DEMO_SESSION_ID, provider=args.provider)
+        await seed_kg(DEMO_SESSION_ID, provider=args.provider, user_id=args.user_id or "")
     else:
         print("\n── Phase 1 skipped (--skip-kg)")
 

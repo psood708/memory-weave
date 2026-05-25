@@ -14,7 +14,7 @@ def _kg_path_for_user(user_id: str) -> str:
     """Return the KG JSON path for a given user, creating the directory if needed."""
     if not user_id:
         return settings.kg_store_path
-    base = Path(settings.kg_store_path).parent.parent / "users" / user_id
+    base = Path(settings.kg_store_path).parent / "users" / user_id
     base.mkdir(parents=True, exist_ok=True)
     return str(base / "kg_store.json")
 
