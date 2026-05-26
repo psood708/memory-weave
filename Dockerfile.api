@@ -13,11 +13,16 @@ COPY pyproject.toml uv.lock ./
 # Install dependencies (no dev deps, no editable install)
 RUN uv sync --frozen --no-dev --no-install-project
 
+# Pre-download fastembed embedding model so first request isn't slow
+# BAAI/bge-small-en-v1.5 is ~60 MB, baked into the image layer
+ENV FASTEMBED_CACHE_PATH=/app/.cache/fastembed
+RUN uv run python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5')"
+
 # Copy source
 COPY memoryweave/ ./memoryweave/
 COPY run_api.py ./
 
-# Create data directory
+# Create data directory for local fallback paths
 RUN mkdir -p /app/data/prod
 
 EXPOSE 8000
