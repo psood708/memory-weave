@@ -62,6 +62,14 @@ class Settings(BaseSettings):
     # Redis session cache (leave empty to disable)
     redis_url: str = ""
 
+    # Qdrant Cloud (leave empty to use local ChromaDB)
+    qdrant_url: str = ""
+    qdrant_api_key: str = ""
+
+    # Groq (leave empty to use Ollama)
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.3-70b-versatile"
+
     # API
     cors_origins: list[str] = ["*"]
 

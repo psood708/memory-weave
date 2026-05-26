@@ -3,8 +3,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 
-import chromadb
-from chromadb.config import Settings as ChromaSettings
+from memoryweave.core.config import settings as _settings
 
 
 @dataclass
@@ -40,109 +39,68 @@ class Episode:
 
 
 class EpisodicStore:
-    """ChromaDB-backed episodic memory store with importance scoring and decay."""
-
-    def __init__(self, collection_name: str = "episodes", persist_dir: str = ".chroma"):
-        from memoryweave.core.config import settings as _settings
-        self._settings = _settings
-        if _settings.chroma_host:
-            self._client = chromadb.HttpClient(
-                host=_settings.chroma_host,
-                port=_settings.chroma_port,
-            )
+    def __init__(self, collection_name: str = "episodes", persist_dir: str = ".chroma", backend=None):
+        if backend is not None:
+            self._backend = backend
+        elif _settings.qdrant_url:
+            from memoryweave.memory.episodic_backend import QdrantEpisodicBackend
+            self._backend = QdrantEpisodicBackend(session_id=collection_name)
         else:
-            self._client = chromadb.PersistentClient(
-                path=persist_dir,
-                settings=ChromaSettings(anonymized_telemetry=False),
-            )
-        self._collection = self._client.get_or_create_collection(
-            name=collection_name,
-            metadata={"hnsw:space": "cosine"},
-        )
+            from memoryweave.memory.episodic_backend import ChromaEpisodicBackend
+            self._backend = ChromaEpisodicBackend(collection_name, persist_dir)
         self._turn_counter: int = self._bootstrap_turn_counter()
 
     def _bootstrap_turn_counter(self) -> int:
-        if self._collection.count() == 0:
+        items = self._backend.get_all()
+        if not items:
             return 0
-        items = self._collection.get(include=["metadatas"])
-        if not items["metadatas"]:
-            return 0
-        return max(int(m.get("turn_number", 0)) for m in items["metadatas"])
+        return max(int(meta.get("turn_number", 0)) for _, _, meta in items)
 
     def write(self, episode: Episode) -> None:
-        self._collection.upsert(
+        self._backend.upsert(
             ids=[episode.id],
             documents=[episode.content],
             metadatas=[episode.to_metadata()],
         )
 
     def retrieve(self, query: str, top_k: int = 5) -> list[Episode]:
-        if self._collection.count() == 0:
-            return []
-        results = self._collection.query(
-            query_texts=[query],
-            n_results=min(top_k, self._collection.count()),
-            include=["documents", "metadatas"],
-        )
-        episodes = []
-        for id_, doc, meta in zip(
-            results["ids"][0], results["documents"][0], results["metadatas"][0]
-        ):
-            episodes.append(Episode.from_metadata(id_, doc, meta))
-        return episodes
+        results = self._backend.query(query, top_k)
+        return [Episode.from_metadata(id_, doc, meta) for id_, doc, meta in results]
 
     def apply_decay(self, current_turn: int, decay_lambda: float) -> None:
-        """Exponential decay: score(t) = score(0) × e^(-λ × Δturns)."""
-        if self._collection.count() == 0:
+        items = self._backend.get_all()
+        if not items:
             return
-        all_items = self._collection.get(include=["documents", "metadatas"])
-        ids_to_update, docs_to_update, metas_to_update = [], [], []
-        ids_to_delete = []
-
-        for id_, doc, meta in zip(
-            all_items["ids"], all_items["documents"], all_items["metadatas"]
-        ):
+        ids_to_delete, ids_to_update, docs_to_update, metas_to_update = [], [], [], []
+        for id_, doc, meta in items:
             delta = current_turn - int(meta["turn_number"])
             decayed = float(meta["importance_score"]) * math.exp(-decay_lambda * delta)
-            if decayed < self._settings.episodic_min_importance:
+            if decayed < _settings.episodic_min_importance:
                 ids_to_delete.append(id_)
             else:
                 meta["importance_score"] = decayed
                 ids_to_update.append(id_)
                 docs_to_update.append(doc)
                 metas_to_update.append(meta)
-
         if ids_to_delete:
-            self._collection.delete(ids=ids_to_delete)
+            self._backend.delete(ids_to_delete)
         if ids_to_update:
-            self._collection.upsert(
-                ids=ids_to_update, documents=docs_to_update, metadatas=metas_to_update
-            )
+            self._backend.upsert(ids_to_update, docs_to_update, metas_to_update)
 
     def _maybe_decay(self, decay_lambda: float) -> None:
-        if self._turn_counter % self._settings.episodic_decay_interval == 0:
+        if self._turn_counter % _settings.episodic_decay_interval == 0:
             self.apply_decay(self._turn_counter, decay_lambda)
 
     def update_entity_links(self, episode_id: str, entity_ids: list[str]) -> None:
-        results = self._collection.get(ids=[episode_id], include=["documents", "metadatas"])
-        if not results["ids"]:
-            return
-        meta = results["metadatas"][0]
-        meta["entity_ids"] = ",".join(entity_ids)
-        self._collection.upsert(
-            ids=[episode_id],
-            documents=results["documents"],
-            metadatas=[meta],
-        )
+        self._backend.update_entity_links(episode_id, entity_ids)
 
     def count(self) -> int:
-        return self._collection.count()
+        return self._backend.count()
 
     def clear(self) -> None:
-        """Delete all episodes and reset the turn counter."""
-        ids = self._collection.get()["ids"]
-        if ids:
-            self._collection.delete(ids=ids)
+        items = self._backend.get_all()
+        if items:
+            self._backend.delete([id_ for id_, _, _ in items])
         self._turn_counter = 0
 
     def increment_turn(self) -> int:
