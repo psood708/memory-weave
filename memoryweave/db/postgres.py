@@ -11,7 +11,8 @@ _MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
 async def init_pool() -> None:
     global _pool
-    _pool = await asyncpg.create_pool(dsn=settings.database_url, min_size=2, max_size=10)
+    # min_size=0 avoids holding idle connections on Neon/serverless Postgres
+    _pool = await asyncpg.create_pool(dsn=settings.database_url, min_size=0, max_size=10)
 
 
 async def close_pool() -> None:

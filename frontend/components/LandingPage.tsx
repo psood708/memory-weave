@@ -1,11 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { signIn } from 'next-auth/react';
-
-interface LandingPageProps {
-  onEnter: (view: 'dashboard' | 'evals') => void;
-}
 
 /* ── Brand mark SVG ─────────────────────────────────────────────── */
 function BrandMark() {
@@ -88,14 +86,12 @@ function MemoryNetwork() {
         </filter>
       </defs>
 
-      {/* background grid dots */}
       {Array.from({ length: 8 }, (_, row) =>
         Array.from({ length: 9 }, (_, col) => (
           <circle key={`d-${row}-${col}`} cx={col * 66} cy={row * 66} r="1" fill="rgba(255,255,255,0.035)" />
         ))
       )}
 
-      {/* edges */}
       {EDGES.map(([a, b]) => {
         const na = nodeMap[a], nb = nodeMap[b];
         const type = na.type === 'hub' ? nb.type : na.type;
@@ -112,7 +108,6 @@ function MemoryNetwork() {
         );
       })}
 
-      {/* nodes */}
       {NODES.map((node, i) => {
         const col = NODE_COLORS[node.type];
         const isActive = i === active;
@@ -149,7 +144,6 @@ function MemoryNetwork() {
         );
       })}
 
-      {/* tier badges */}
       <g style={{ animation: 'badge-in 600ms 800ms ease-out both' }}>
         <rect x="56" y="52" width="88" height="22" rx="11"
           fill="rgba(45,212,191,0.1)" stroke="rgba(45,212,191,0.3)" strokeWidth="0.8" />
@@ -315,10 +309,12 @@ function AuthModal({ mode, onClose, onSwitch, onSuccess }: AuthModalProps) {
               </div>
 
               <div className="auth-sso">
-                <button type="button" className="sso-btn" onClick={() => signIn('google', { callbackUrl: '/setup' })}>
+                <button type="button" className="sso-btn"
+                  onClick={() => signIn('google', { callbackUrl: '/setup' })}>
                   <GoogleIcon />Google
                 </button>
-                <button type="button" className="sso-btn" onClick={() => signIn('google', { callbackUrl: '/setup' })}>
+                <button type="button" className="sso-btn"
+                  onClick={() => signIn('github', { callbackUrl: '/setup' })}>
                   <GithubIcon />GitHub
                 </button>
               </div>
@@ -339,11 +335,12 @@ function AuthModal({ mode, onClose, onSwitch, onSuccess }: AuthModalProps) {
   );
 }
 
-/* ── Nav ────────────────────────────────────────────────────────── */
-function Nav({ onSignin, onSignup, onDashboard }: {
+/* ── Session-aware nav ──────────────────────────────────────────── */
+function Nav({ onSignin, onSignup, onDashboard, isAuthed }: {
   onSignin: () => void;
   onSignup: () => void;
   onDashboard: () => void;
+  isAuthed: boolean;
 }) {
   return (
     <nav className="hn">
@@ -358,20 +355,35 @@ function Nav({ onSignin, onSignup, onDashboard }: {
         <span className="hn-link" style={{ cursor: 'default', color: 'var(--fg-4)' }}>API</span>
       </div>
       <div className="hn-actions">
-        <button className="btn-ghost" onClick={onSignin}>Sign in</button>
-        <button className="btn-primary" onClick={onSignup}>
-          Get started
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
-          </svg>
-        </button>
+        {isAuthed ? (
+          <button className="btn-primary" onClick={onDashboard}>
+            Go to dashboard
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+            </svg>
+          </button>
+        ) : (
+          <>
+            <button className="btn-ghost" onClick={onSignin}>Sign in</button>
+            <button className="btn-primary" onClick={onSignup}>
+              Get started
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+              </svg>
+            </button>
+          </>
+        )}
       </div>
     </nav>
   );
 }
 
 /* ── Hero ───────────────────────────────────────────────────────── */
-function Hero({ onGetStarted, onDashboard }: { onGetStarted: () => void; onDashboard: () => void }) {
+function Hero({ onGetStarted, onDashboard, isAuthed }: {
+  onGetStarted: () => void;
+  onDashboard: () => void;
+  isAuthed: boolean;
+}) {
   return (
     <section className="hh">
       <div className="hh-left">
@@ -384,18 +396,20 @@ function Hero({ onGetStarted, onDashboard }: { onGetStarted: () => void; onDashb
           MemoryWeave gives your AI a layered, persistent memory — working context, episodic recall, and a living knowledge graph that grows richer with every conversation.
         </p>
         <div className="hh-ctas">
-          <button className="hh-cta-primary" onClick={onGetStarted}>
-            Get started free
+          <button className="hh-cta-primary" onClick={isAuthed ? onDashboard : onGetStarted}>
+            {isAuthed ? 'Open dashboard' : 'Get started free'}
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
             </svg>
           </button>
-          <button className="hh-cta-ghost" onClick={onDashboard}>
-            Open dashboard
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/>
-            </svg>
-          </button>
+          {!isAuthed && (
+            <button className="hh-cta-ghost" onClick={onDashboard}>
+              Open dashboard
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/>
+              </svg>
+            </button>
+          )}
         </div>
         <div className="hh-stats">
           <div className="hh-stat">
@@ -476,24 +490,61 @@ function TiersSection() {
 }
 
 /* ── Root ───────────────────────────────────────────────────────── */
-export default function LandingPage({ onEnter }: LandingPageProps) {
-  const [auth, setAuth] = useState<'signin' | 'signup' | null>(null);
+export default function LandingPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { data: session, status } = useSession();
+
+  const isAuthed = status === 'authenticated' && !!session;
+
+  // Auto-open modal when middleware redirects unauthenticated users here
+  const [auth, setAuth] = useState<'signin' | 'signup' | null>(() => {
+    // Can't read searchParams during SSR, handled in useEffect
+    return null;
+  });
+
+  useEffect(() => {
+    const param = searchParams.get('auth');
+    if (param === 'signin' || param === 'signup') {
+      setAuth(param);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     document.body.classList.add('home-page');
     return () => document.body.classList.remove('home-page');
   }, []);
 
+  const goToDashboard = () => router.push('/dashboard');
+
+  const handleGetStarted = () => {
+    if (isAuthed) {
+      goToDashboard();
+    } else {
+      setAuth('signup');
+    }
+  };
+
+  const handleSignin = () => {
+    if (isAuthed) {
+      goToDashboard();
+    } else {
+      setAuth('signin');
+    }
+  };
+
   return (
     <div style={{ background: 'var(--bg-0)', minHeight: '100vh' }}>
       <Nav
-        onSignin={() => setAuth('signin')}
-        onSignup={() => setAuth('signup')}
-        onDashboard={() => onEnter('dashboard')}
+        onSignin={handleSignin}
+        onSignup={handleGetStarted}
+        onDashboard={goToDashboard}
+        isAuthed={isAuthed}
       />
       <Hero
-        onGetStarted={() => setAuth('signup')}
-        onDashboard={() => onEnter('dashboard')}
+        onGetStarted={handleGetStarted}
+        onDashboard={goToDashboard}
+        isAuthed={isAuthed}
       />
       <TiersSection />
       {auth && (
@@ -501,7 +552,7 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
           mode={auth}
           onClose={() => setAuth(null)}
           onSwitch={setAuth}
-          onSuccess={() => onEnter('dashboard')}
+          onSuccess={goToDashboard}
         />
       )}
     </div>
