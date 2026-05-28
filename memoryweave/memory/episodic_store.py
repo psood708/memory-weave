@@ -67,6 +67,10 @@ class EpisodicStore:
         results = self._backend.query(query, top_k)
         return [Episode.from_metadata(id_, doc, meta) for id_, doc, meta in results]
 
+    def list_all(self) -> list[Episode]:
+        """Return all stored episodes without vector search — for display/inspection."""
+        return [Episode.from_metadata(id_, doc, meta) for id_, doc, meta in self._backend.get_all()]
+
     def apply_decay(self, current_turn: int, decay_lambda: float) -> None:
         items = self._backend.get_all()
         if not items:

@@ -259,7 +259,7 @@ async def get_memory(
             role = "bot"
         working_turns.append(WorkingTurn(role=role, text=extract_text(msg.content)))
 
-    all_episodes = session.episodic._store.retrieve("", top_k=50)
+    all_episodes = session.episodic._store.list_all()
     now = datetime.now(timezone.utc)
     episode_list: list[EpisodeMemory] = []
     for ep in all_episodes:

@@ -191,14 +191,14 @@ MEMORY_TURNS = [
         "aligned with language models.",
     ),
     (
-        "Professor David Kim at UIUC was my thesis advisor. He reviewed the MemoryWeave "
-        "architecture last month and suggested adding a forgetting curve to episodic "
-        "memory, which became the basis of my exponential decay implementation.",
+        ".",
         "Professor David Kim (UIUC, thesis advisor) suggested the forgetting curve, "
         "which became the basis of MemoryWeave's exponential decay.",
     ),
     (
-        "Deployment plan: FastAPI backend on Railway with a persistent volume for "
+        "Deployment planProfessor David Kim at UIUC was my thesis advisor. He reviewed the MemoryWeave "
+        "architecture last month and suggested adding a forgetting curve to episodic "
+        "memory, which became the basis of my exponential decay implementation: FastAPI backend on Railway with a persistent volume for "
         "ChromaDB data and the SQLite metrics database. Next.js frontend on Vercel. "
         "They're linked via the NEXT_PUBLIC_API_URL environment variable.",
         "Deploy: Railway for FastAPI with persistent volume, Vercel for Next.js, "

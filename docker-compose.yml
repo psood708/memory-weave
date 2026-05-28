@@ -22,11 +22,6 @@ services:
       - chroma_data:/chroma/chroma
     ports:
       - "8001:8000"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     restart: unless-stopped
 
   redis:
@@ -51,11 +46,13 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      chroma:
-        condition: service_healthy
       redis:
         condition: service_healthy
+      chroma:
+        condition: service_started
     env_file:
+      - path: .env
+        required: false
       - path: .env.production
         required: false
     environment:
@@ -85,6 +82,12 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NEXTAUTH_URL: http://localhost:3000
+      NEXT_PUBLIC_API_URL: http://localhost:8000
     restart: unless-stopped
 
 volumes:
