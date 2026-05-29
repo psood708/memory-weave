@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Icon } from './Icon';
 import { clearMemory, fetchMemoryState } from '@/lib/api';
-import type { MemoryState } from '@/lib/api';
+import type { MemoryState, Provider } from '@/lib/api';
 
 interface ClearRowProps {
   label: string;
@@ -52,7 +52,7 @@ function ClearRow({ label, description, tier, swatch, onClear, busy }: ClearRowP
 
 export interface SettingsProps {
   sessionId: string;
-  provider: 'ollama' | 'huggingface';
+  provider: Provider;
   memoryState: MemoryState | null;
   onMemoryUpdate: (state: MemoryState) => void;
   onConvClear: () => void;
@@ -89,7 +89,7 @@ export default function Settings({
       <div className="settings-panel">
         <div className="settings-head">
           <span className="settings-title">Settings</span>
-          <button className="icon-btn" onClick={onClose}><Icon name="close" size={13} /></button>
+          <button className="icon-btn" data-tooltip="Close" onClick={onClose}><Icon name="close" size={13} /></button>
         </div>
 
         <div className="settings-body">

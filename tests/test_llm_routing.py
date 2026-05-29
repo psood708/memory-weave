@@ -25,3 +25,18 @@ def test_get_llm_uses_hf_when_config_provided():
         mock_ep.assert_called_once()
         assert mock_ep.call_args.kwargs["repo_id"] == "Qwen/Qwen2.5-7B-Instruct"
         assert mock_ep.call_args.kwargs["huggingfacehub_api_token"] == "hf_test"
+
+
+def test_get_llm_uses_groq_when_provider_set():
+    with patch("memoryweave.core.llm._groq_llm") as mock_groq:
+        mock_groq.return_value = MagicMock()
+        get_llm(provider="groq")
+        mock_groq.assert_called_once()
+
+
+def test_get_extraction_llm_uses_groq_when_provider_set():
+    with patch("memoryweave.core.llm._groq_extraction_llm") as mock_groq:
+        mock_groq.return_value = MagicMock()
+        from memoryweave.core.llm import get_extraction_llm
+        get_extraction_llm(provider="groq")
+        mock_groq.assert_called_once()

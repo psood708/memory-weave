@@ -1,5 +1,6 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
+import GitHub from "next-auth/providers/github";
 import { JWT } from "next-auth/jwt";
 import { SignJWT, jwtVerify } from "jose";
 
@@ -12,6 +13,10 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
+    GitHub({
+      clientId: process.env.GITHUB_CLIENT_ID!,
+      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
     }),
   ],
   secret: process.env.AUTH_SECRET,
@@ -42,6 +47,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
       return session;
     },
     async redirect({ url, baseUrl }) {
+      // After OAuth, go through model setup then to dashboard
       if (url === baseUrl || url === `${baseUrl}/`) return `${baseUrl}/setup`;
       return url.startsWith(baseUrl) ? url : baseUrl;
     },

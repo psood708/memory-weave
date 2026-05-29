@@ -50,7 +50,7 @@ export default function ModelSetupModal() {
       setError(data.detail ?? "Failed to save config");
       return;
     }
-    router.push("/");
+    router.push("/dashboard");
   }
 
   async function handleSkip() {
@@ -60,7 +60,7 @@ export default function ModelSetupModal() {
       credentials: "include",
       body: JSON.stringify({ provider: "ollama" }),
     });
-    router.push("/");
+    router.push("/dashboard");
   }
 
   if (!catalog) return <div className="text-gray-400 text-sm">Loading models…</div>;

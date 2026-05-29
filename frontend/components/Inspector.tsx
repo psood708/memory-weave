@@ -50,7 +50,7 @@ export function EpisodeInspector({
             <span className="tag" style={{ color: 'var(--episodic)', borderColor: 'var(--episodic-line)', background: 'var(--episodic-soft)' }}>EPISODE</span>
             <h3>{episode.id}</h3>
           </div>
-          <button className="icon-btn" onClick={onClose}><Icon name="close" size={14} /></button>
+          <button className="icon-btn" data-tooltip="Close" onClick={onClose}><Icon name="close" size={14} /></button>
         </div>
         <div className="drawer-body">
           <div className="drawer-section">
@@ -117,7 +117,7 @@ export function EntityInspector({
             <span className="tag" style={{ color: 'var(--kg)', borderColor: 'var(--kg-line)', background: 'var(--kg-soft)' }}>ENTITY · {entity.type.toUpperCase()}</span>
             <h3>{entity.name}</h3>
           </div>
-          <button className="icon-btn" onClick={onClose}><Icon name="close" size={14} /></button>
+          <button className="icon-btn" data-tooltip="Close" onClick={onClose}><Icon name="close" size={14} /></button>
         </div>
         <div className="drawer-body">
           <div className="drawer-section">

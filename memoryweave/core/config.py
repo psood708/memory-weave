@@ -52,6 +52,24 @@ class Settings(BaseSettings):
     kg_store_path: str = "./data/dev/kg_store.json"
     eval_db_path: str = "./data/dev/metrics.db"
 
+    # PostgreSQL
+    database_url: str = "postgresql://memoryweave:memoryweave@localhost:5432/memoryweave"
+
+    # ChromaDB server mode (leave empty to use local PersistentClient)
+    chroma_host: str = ""
+    chroma_port: int = 8000
+
+    # Redis session cache (leave empty to disable)
+    redis_url: str = ""
+
+    # Qdrant Cloud (leave empty to use local ChromaDB)
+    qdrant_url: str = ""
+    qdrant_api_key: str = ""
+
+    # Groq (leave empty to use Ollama)
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.3-70b-versatile"
+
     # API
     cors_origins: list[str] = ["*"]
 

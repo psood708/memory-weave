@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS sessions (
     id          TEXT PRIMARY KEY,
     user_id     TEXT REFERENCES users(id),
-    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
     turn_count  INTEGER DEFAULT 0,
     status      TEXT DEFAULT 'active'
 );
@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS turn_metrics (
     id                      TEXT PRIMARY KEY,
     session_id              TEXT REFERENCES sessions(id),
     turn_number             INTEGER NOT NULL,
-    timestamp               DATETIME NOT NULL,
+    timestamp               TIMESTAMPTZ NOT NULL,
     system_tokens           INTEGER,
     naive_tokens            INTEGER,
     token_efficiency        REAL,
@@ -27,8 +27,8 @@ CREATE TABLE IF NOT EXISTS judge_tasks (
     id              TEXT PRIMARY KEY,
     turn_metric_id  TEXT REFERENCES turn_metrics(id),
     status          TEXT DEFAULT 'pending',
-    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
-    completed_at    DATETIME
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    completed_at    TIMESTAMPTZ
 );
 
 CREATE INDEX IF NOT EXISTS idx_turn_metrics_session ON turn_metrics(session_id, timestamp);

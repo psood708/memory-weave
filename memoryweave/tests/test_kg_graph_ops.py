@@ -1,6 +1,7 @@
 import pytest
 
 from memoryweave.core.state import MemoryWeaveState
+from memoryweave.memory.kg_backend import FileKGBackend
 from memoryweave.memory.kg_store import KnowledgeGraphStore
 
 
@@ -21,7 +22,8 @@ def test_state_shape():
 
 @pytest.fixture
 def store(tmp_path):
-    return KnowledgeGraphStore(persist_path=str(tmp_path / "kg.json"))
+    backend = FileKGBackend(str(tmp_path))
+    return KnowledgeGraphStore(backend=backend, user_id="test_user")
 
 
 def test_upsert_node(store):

@@ -4,23 +4,24 @@ import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import Depends, FastAPI, Query
+import asyncpg
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage
 from pydantic import BaseModel
 
-import aiosqlite
-
 from memoryweave.auth.models import UserSession
 from memoryweave.auth.session import verify_session
-from memoryweave.db.database import init_db, get_db
+from memoryweave.db.database import get_db, new_uuid
+from memoryweave.db.postgres import close_pool, get_pool, init_db, init_pool
+from memoryweave.db.redis_client import close_redis, init_redis
 from memoryweave.models.config_repo import ModelConfigRepo
 from memoryweave.api.eval_routes import router as eval_router
 from memoryweave.eval.bus import EvalEventBus
 from memoryweave.eval.judges.heuristic_judge import HeuristicJudge
 from memoryweave.eval.judges.ragas_judge import RagasJudge
-from memoryweave.eval.repository.sqlite_repo import SQLiteMetricsRepository
+from memoryweave.eval.repository.postgres_repo import PostgresMetricsRepository
 from memoryweave.eval.workers.judge import LLMJudgeWorker
 from memoryweave.eval.workers.token_metrics import TokenMetricsWorker
 from memoryweave.eval.workers.forgetting import ForgettingTracker
@@ -56,36 +57,41 @@ judge_worker: LLMJudgeWorker = None  # initialized in lifespan
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global judge_worker
+    await init_pool()
+    await init_redis()
     await init_db()
 
-    async with aiosqlite.connect(settings.eval_db_path) as db:
-        db.row_factory = aiosqlite.Row
-        repo = SQLiteMetricsRepository(db)
-        token_worker = TokenMetricsWorker(repo)
+    pool = get_pool()
+    repo = PostgresMetricsRepository(pool)
+    token_worker = TokenMetricsWorker(repo)
 
-        backend = settings.eval_judge_backend
-        judge = RagasJudge() if backend == "ragas" else HeuristicJudge()
-        judge_worker = LLMJudgeWorker(
-            judge=judge, repo=repo,
-            max_failures=settings.judge_circuit_breaker_failures,
-            timeout_secs=settings.judge_circuit_breaker_timeout,
-        )
+    backend = settings.eval_judge_backend
+    judge = RagasJudge() if backend == "ragas" else HeuristicJudge()
+    judge_worker = LLMJudgeWorker(
+        judge=judge, repo=repo,
+        max_failures=settings.judge_circuit_breaker_failures,
+        timeout_secs=settings.judge_circuit_breaker_timeout,
+    )
 
-        async def _eval_consumer():
-            while True:
-                event = await eval_bus.get()
-                turn_id = await token_worker.process(event)
-                if turn_id:
-                    event.turn_metric_id = turn_id
-                    await judge_worker.process(
-                        turn_id, event.question,
-                        event.episode_texts + event.kg_texts,
-                        event.answer,
-                    )
+    async def _eval_consumer():
+        while True:
+            event = await eval_bus.get()
+            turn_id = await token_worker.process(event)
+            if turn_id:
+                event.turn_metric_id = turn_id
+                await judge_worker.process(
+                    turn_id, event.question,
+                    event.episode_texts + event.kg_texts,
+                    event.answer,
+                )
 
-        consumer_task = asyncio.create_task(_eval_consumer())
+    consumer_task = asyncio.create_task(_eval_consumer())
+    try:
         yield
+    finally:
         consumer_task.cancel()
+        await close_redis()
+        await close_pool()
 
 
 app = FastAPI(title="MemoryWeave API", version="0.1.0", lifespan=lifespan)
@@ -114,7 +120,6 @@ class ChatRequest(BaseModel):
 # ── SSE helpers ───────────────────────────────────────────────────────────────
 
 def _sse(event: str, data: dict) -> str:
-    """Format a single SSE message."""
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
@@ -124,30 +129,26 @@ def _sse(event: str, data: dict) -> str:
 async def chat_stream(
     req: ChatRequest,
     user_session: UserSession = Depends(verify_session),
-    db: aiosqlite.Connection = Depends(get_db),
+    db: asyncpg.Connection = Depends(get_db),
 ):
     """Stream agent steps and LLM tokens as Server-Sent Events."""
     user_config = await ModelConfigRepo(db).load(user_session.user_id)
 
     async def generate():
-        session: SessionState = get_or_create_session(req.session_id, req.provider, user_config=user_config)
+        session: SessionState = await get_or_create_session(req.session_id, req.provider, user_config=user_config)
         t_start = time.perf_counter()
 
-        # Launch graph.invoke in background immediately — don't wait for it yet.
         invoke_task = asyncio.create_task(
             asyncio.to_thread(session.graph.invoke, {"user_input": req.message})
         )
 
-        # Emit animated pipeline steps while graph runs (overlaps with real retrieval).
         for step in ("ep", "kg", "mrg"):
             yield _sse("agent_step", {"step": step, "status": "active"})
             await asyncio.sleep(0.15)
             yield _sse("agent_step", {"step": step, "status": "done"})
 
-        # Now await the graph result (likely already done or nearly done).
         state_result: dict = await invoke_task
 
-        # cnv active — start streaming tokens
         yield _sse("agent_step", {"step": "cnv", "status": "active"})
 
         response_text: str = state_result.get("response", "")
@@ -157,21 +158,18 @@ async def chat_stream(
             yield _sse("token", {"text": chunk})
             await asyncio.sleep(0.02)
 
-        # Update session state
         token_estimate: int = state_result.get("token_estimate", 0)
         session.last_token_estimate = token_estimate
         session.turn_count += 1
 
         latency = round(time.perf_counter() - t_start, 2)
 
-        # Build done metadata
         retrieved_episodes = state_result.get("episodes", [])
         episodes_count = len(retrieved_episodes) if retrieved_episodes else 0
 
         kg_context: str = state_result.get("kg_context", "") or ""
         hops = len([ln for ln in kg_context.splitlines() if ln.strip() and not ln.startswith(" ")])
 
-        # Build context payload
         episode_contexts = []
         for ep in (retrieved_episodes or []):
             episode_contexts.append(
@@ -208,10 +206,13 @@ async def chat_stream(
         )
         yield _sse("done", done_payload.model_dump())
 
-        # In memory mode: write to episodic + KG and notify frontend.
-        # In question mode: retrieval already ran; skip writes so graph stays clean.
         if req.mode != "question":
-            await session.write_turn_async(req.message, response_text)
+            await session.write_turn_async(
+                req.message,
+                response_text,
+                total_latency_ms=int(latency * 1000),
+                kg_context=kg_context,
+            )
             yield _sse("memory_updated", {})
 
     return StreamingResponse(
@@ -243,12 +244,11 @@ async def get_memory(
     session_id: str = Query(...),
     provider: str = Query(default="ollama"),
     user_session: UserSession = Depends(verify_session),
-    db: aiosqlite.Connection = Depends(get_db),
+    db: asyncpg.Connection = Depends(get_db),
 ):
     user_config = await ModelConfigRepo(db).load(user_session.user_id)
-    session: SessionState = get_or_create_session(session_id, provider, user_config=user_config)
+    session: SessionState = await get_or_create_session(session_id, provider, user_config=user_config)
 
-    # Working turns
     working_turns: list[WorkingTurn] = []
     for msg in session.working.get():
         if isinstance(msg, HumanMessage):
@@ -259,8 +259,7 @@ async def get_memory(
             role = "bot"
         working_turns.append(WorkingTurn(role=role, text=extract_text(msg.content)))
 
-    # Episodes
-    all_episodes = session.episodic._store.retrieve("", top_k=50)
+    all_episodes = session.episodic._store.list_all()
     now = datetime.now(timezone.utc)
     episode_list: list[EpisodeMemory] = []
     for ep in all_episodes:
@@ -281,25 +280,17 @@ async def get_memory(
             )
         )
 
-    # Entities from KG
     graph = session.kg.store._graph
     entity_list: list[EntityMemory] = []
     for name, attrs in graph.nodes(data=True):
         node_type = attrs.get("type", "")
         mapped_type = _map_entity_type(node_type)
-
-        # Average edge weight for this node
         edge_weights = [
-            d["weight"]
-            for _, _, d in graph.out_edges(name, data=True)
-            if "weight" in d
+            d["weight"] for _, _, d in graph.out_edges(name, data=True) if "weight" in d
         ] + [
-            d["weight"]
-            for _, _, d in graph.in_edges(name, data=True)
-            if "weight" in d
+            d["weight"] for _, _, d in graph.in_edges(name, data=True) if "weight" in d
         ]
         avg_weight = round(sum(edge_weights) / len(edge_weights), 3) if edge_weights else 0.0
-
         entity_list.append(
             EntityMemory(
                 id="e_" + name.lower().replace(" ", "_"),
@@ -311,7 +302,6 @@ async def get_memory(
             )
         )
 
-    # Edges
     edge_list: list[EdgeMemory] = []
     for src, tgt, data in graph.edges(data=True):
         edge_list.append(
@@ -323,7 +313,6 @@ async def get_memory(
             )
         )
 
-    # Budget
     used = session.last_token_estimate
     budget = Budget(
         total=settings.context_token_budget,
@@ -348,7 +337,7 @@ async def get_memory(
 
 @app.post("/api/sessions/reset")
 async def reset_sessions():
-    """Flush in-memory sessions so the next request reloads KG and episodes from disk."""
+    """Flush in-memory sessions so the next request reloads KG and episodes from storage."""
     count = clear_sessions()
     return {"cleared": count}
 
@@ -362,9 +351,18 @@ class ClearRequest(BaseModel):
 
 
 @app.post("/api/sessions/clear-memory")
-async def clear_memory(req: ClearRequest):
-    """Wipe stored memory for a session. target controls what gets cleared."""
-    session: SessionState = get_or_create_session(req.session_id, req.provider)
+async def clear_memory(
+    req: ClearRequest,
+    user_session: UserSession = Depends(verify_session),
+    db: asyncpg.Connection = Depends(get_db),
+):
+    """Wipe stored memory for a session. Only the session owner can clear."""
+    row = await db.fetchrow("SELECT user_id FROM sessions WHERE id = $1", req.session_id)
+    if row and row["user_id"] and row["user_id"] != user_session.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to clear this session")
+
+    user_config = await ModelConfigRepo(db).load(user_session.user_id)
+    session: SessionState = await get_or_create_session(req.session_id, req.provider, user_config=user_config)
 
     cleared = []
 
@@ -377,12 +375,18 @@ async def clear_memory(req: ClearRequest):
         cleared.append("episodic")
 
     if req.target in ("all", "kg"):
-        session.kg.store.clear()
+        await session.kg.store.clear()
         cleared.append("kg")
 
-    # Drop session so next request rebuilds from (now-empty) disk state.
+    if req.target == "all":
+        async with db.transaction():
+            await db.execute("DELETE FROM turn_metrics WHERE session_id = $1", req.session_id)
+            await db.execute("DELETE FROM sessions WHERE id = $1", req.session_id)
+        cleared.append("eval")
+
     from memoryweave.api.session import _sessions
-    key = f"{req.session_id}:{req.provider}"
+    user_id = user_config.user_id if user_config else ""
+    key = f"{req.session_id}:{user_id}"
     _sessions.pop(key, None)
 
     return {"cleared": cleared}

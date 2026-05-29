@@ -12,11 +12,13 @@ if TYPE_CHECKING:
 
 
 def get_llm(temperature: float = 0.7, provider: str | None = None, user_config: UserModelConfig | None = None):
-    if user_config and user_config.provider == "huggingface" and user_config.chat_model:
+    if user_config and user_config.provider in ("huggingface", "custom") and user_config.chat_model:
         return _hf_llm(temperature, model=user_config.chat_model, api_key=user_config.hf_api_key)
     p = provider or settings.llm_provider
-    if p == "huggingface":
+    if p in ("huggingface", "custom"):
         return _hf_llm(temperature)
+    if p == "groq":
+        return _groq_llm(temperature)
     return ChatOllama(
         model=settings.ollama_model,
         base_url=settings.ollama_base_url,
@@ -30,11 +32,13 @@ def get_llm(temperature: float = 0.7, provider: str | None = None, user_config: 
 
 def get_extraction_llm(provider: str | None = None, user_config: UserModelConfig | None = None):
     """JSON-mode LLM for entity extraction and importance scoring."""
-    if user_config and user_config.provider == "huggingface" and user_config.hf_api_key:
+    if user_config and user_config.provider in ("huggingface", "custom") and user_config.hf_api_key:
         return _hf_extraction_llm(api_key=user_config.hf_api_key)
     p = provider or settings.llm_provider
-    if p == "huggingface":
+    if p in ("huggingface", "custom"):
         return _hf_extraction_llm()
+    if p == "groq":
+        return _groq_extraction_llm()
     return ChatOllama(
         model=settings.ollama_model,
         base_url=settings.ollama_base_url,
@@ -56,6 +60,24 @@ def _hf_llm(temperature: float = 0.7, model: str | None = None, api_key: str | N
         task="text-generation",
     )
     return ChatHuggingFace(llm=endpoint)
+
+
+def _groq_llm(temperature: float = 0.7):
+    from langchain_groq import ChatGroq
+    return ChatGroq(
+        model=settings.groq_model,
+        api_key=settings.groq_api_key or None,
+        temperature=temperature,
+    )
+
+
+def _groq_extraction_llm():
+    from langchain_groq import ChatGroq
+    return ChatGroq(
+        model=settings.groq_model,
+        api_key=settings.groq_api_key or None,
+        temperature=0,
+    ).bind(response_format={"type": "json_object"})
 
 
 def _hf_extraction_llm(api_key: str | None = None):

@@ -1,10 +1,10 @@
-import aiosqlite
+import asyncpg
 from fastapi import APIRouter, Depends, Query
 
 from memoryweave.auth.models import UserSession
 from memoryweave.auth.session import verify_session
-from memoryweave.db.database import get_db
-from memoryweave.eval.repository.sqlite_repo import SQLiteMetricsRepository
+from memoryweave.db.postgres import get_pool
+from memoryweave.eval.repository.postgres_repo import PostgresMetricsRepository
 
 router = APIRouter(prefix="/eval")
 
@@ -14,9 +14,9 @@ async def get_metrics(
     session_id: str = Query(...),
     limit: int = Query(50, le=200),
     session: UserSession = Depends(verify_session),
-    db: aiosqlite.Connection = Depends(get_db),
+    pool: asyncpg.Pool = Depends(get_pool),
 ):
-    repo = SQLiteMetricsRepository(db)
+    repo = PostgresMetricsRepository(pool)
     turns = await repo.list_turns(session_id, limit=limit)
     summary = await repo.get_session_summary(session_id)
     return {
@@ -47,9 +47,9 @@ async def get_metrics(
 async def get_sessions(
     limit: int = Query(20, le=100),
     session: UserSession = Depends(verify_session),
-    db: aiosqlite.Connection = Depends(get_db),
+    pool: asyncpg.Pool = Depends(get_pool),
 ):
-    repo = SQLiteMetricsRepository(db)
+    repo = PostgresMetricsRepository(pool)
     sessions = await repo.list_sessions(session.user_id, limit=limit)
     return [
         {

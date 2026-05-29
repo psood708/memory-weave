@@ -12,7 +12,10 @@ class EpisodicMemoryAgent:
 
     def __init__(self, session_id: str, store: EpisodicStore | None = None):
         self._session_id = session_id
-        self._store = store or EpisodicStore(persist_dir=settings.chroma_path)
+        self._store = store or EpisodicStore(
+            collection_name=session_id,
+            persist_dir=settings.chroma_path,
+        )
 
     def write(self, messages: list[BaseMessage], importance_score: float, entity_ids: list[str] | None = None) -> Episode | None:
         content = "\n".join(

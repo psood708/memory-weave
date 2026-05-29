@@ -5,7 +5,10 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12, <3.14"
 dependencies = [
-    "aiosqlite>=0.22.1",
+    "asyncpg>=0.30.0",
+    "redis[asyncio]>=5.0.0",
+    "qdrant-client[fastembed]>=1.9.0",
+    "langchain-groq>=0.2.0",
     "chromadb>=1.5.9",
     "cryptography>=48.0.0",
     "fastapi>=0.136.1",

@@ -216,10 +216,10 @@ export default function MemoryPanel(props: MemoryPanelProps) {
       <div className="panel-head">
         <span className="panel-title">Memory State</span>
         <div className="panel-actions">
-          <button className="icon-btn" title="Reload from disk (pick up demo/CLI changes)" onClick={props.onReload}><Icon name="refresh" size={13} /></button>
-          <button className="icon-btn" title="History"><Icon name="history" size={13} /></button>
+          <button className="icon-btn" data-tooltip="Reload from disk" onClick={props.onReload}><Icon name="refresh" size={13} /></button>
+          <button className="icon-btn" data-tooltip="History"><Icon name="history" size={13} /></button>
           {props.onCollapse && (
-            <button className="icon-btn" title="Hide panel" onClick={props.onCollapse}>
+            <button className="icon-btn" data-tooltip="Hide panel" onClick={props.onCollapse}>
               <Icon name="panel-left" size={13} />
             </button>
           )}
