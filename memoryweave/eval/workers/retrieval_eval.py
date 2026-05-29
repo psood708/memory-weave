@@ -17,6 +17,7 @@ import re
 import asyncpg
 from langchain_core.messages import HumanMessage
 
+from memoryweave.core.config import settings
 from memoryweave.core.llm import extract_text, get_extraction_llm
 from memoryweave.db.database import new_uuid
 from memoryweave.eval.events import TurnEvent
@@ -66,7 +67,7 @@ class RetrievalEvalWorker:
 
     def __init__(self, pool: asyncpg.Pool):
         self._pool = pool
-        self._llm = get_extraction_llm()
+        self._llm = get_extraction_llm(provider=settings.llm_provider)
 
     async def process(self, turn_metric_id: str, event: TurnEvent) -> None:
         context_parts = []
@@ -104,31 +105,37 @@ class RetrievalEvalWorker:
                 answer_relevance = float(max(0.0, min(1.0, data.get("answer_relevance", 0))))
                 reasoning = data.get("reasoning", "")
         except Exception as e:
-            logger.warning("RetrievalEvalWorker failed: %s", e)
+            logger.warning("RetrievalEvalWorker LLM eval failed: %s", e)
 
-        await self._write(
-            turn_metric_id=turn_metric_id,
-            session_id=event.session_id,
-            turn_number=event.turn_number,
-            kg_seed_found=kg_seed_found,
-            episode_count=episode_count,
-            kg_node_count=kg_node_count,
-            context_relevance=context_relevance,
-            faithfulness=faithfulness,
-            answer_relevance=answer_relevance,
-            reasoning=reasoning,
-        )
+        try:
+            await self._write(
+                turn_metric_id=turn_metric_id,
+                session_id=event.session_id,
+                turn_number=event.turn_number,
+                kg_seed_found=kg_seed_found,
+                episode_count=episode_count,
+                kg_node_count=kg_node_count,
+                context_relevance=context_relevance,
+                faithfulness=faithfulness,
+                answer_relevance=answer_relevance,
+                reasoning=reasoning,
+            )
+        except Exception as e:
+            logger.warning("RetrievalEvalWorker DB write failed: %s", e)
 
     async def write_structural(self, turn_metric_id: str, event: TurnEvent) -> None:
         """Write only structural metrics (no LLM call) — fast path for question mode."""
-        await self._write(
-            turn_metric_id=turn_metric_id,
-            session_id=event.session_id,
-            turn_number=event.turn_number,
-            kg_seed_found=bool(event.kg_texts),
-            episode_count=len(event.episode_texts),
-            kg_node_count=0,
-        )
+        try:
+            await self._write(
+                turn_metric_id=turn_metric_id,
+                session_id=event.session_id,
+                turn_number=event.turn_number,
+                kg_seed_found=bool(event.kg_texts),
+                episode_count=len(event.episode_texts),
+                kg_node_count=0,
+            )
+        except Exception as e:
+            logger.warning("RetrievalEvalWorker DB write failed: %s", e)
 
     async def _write(
         self,

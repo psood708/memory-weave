@@ -57,6 +57,16 @@ entity/relationship rules:
 Return ONLY the JSON object."""
 
 
+_STOPWORDS: frozenset[str] = frozenset({
+    "what", "does", "this", "that", "they", "them", "from", "with", "when",
+    "where", "which", "have", "been", "will", "were", "their", "some", "tell",
+    "know", "about", "like", "work", "used", "more", "than", "also", "just",
+    "your", "make", "much", "most", "into", "then", "here", "there", "give",
+    "show", "find", "help", "said", "each", "time", "very", "many", "name",
+    "such", "only", "even", "those", "other", "same", "using", "list", "kind",
+    "type", "sort", "thing", "things", "something", "anything", "nothing",
+})
+
 _TYPE_COERCE: dict[str, str] = {
     "Technology": "Fact",
     "Tool": "Fact",
@@ -144,10 +154,16 @@ class KGAgent:
         graph_nodes = list(self._store._graph.nodes)
         text_lower = text.lower()
 
-        # Tier 1: exact match
+        # Tier 1a: exact match — full node name is substring of query
         exact = [n for n in graph_nodes if n.lower() in text_lower]
         if exact:
             return exact
+
+        # Tier 1b: token match — significant query words (≥4 chars, non-stopword) in node names
+        query_words = {w for w in re.findall(r'\b[a-z]{4,}\b', text_lower) if w not in _STOPWORDS}
+        token_hits = [n for n in graph_nodes if any(w in n.lower() for w in query_words)]
+        if token_hits:
+            return token_hits
 
         # Tier 2: LLM-extracted entities → match against graph
         try:

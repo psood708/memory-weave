@@ -1,8 +1,11 @@
 import asyncio
 import json
+import logging
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 import asyncpg
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -78,20 +81,24 @@ async def lifespan(app: FastAPI):
 
     async def _eval_consumer():
         while True:
-            event = await eval_bus.get()
-            if event.is_question_mode:
-                # Question mode: retrieval-quality eval only, no token metrics
-                await retrieval_eval_worker.process("", event)
-            else:
-                turn_id = await token_worker.process(event)
-                if turn_id:
-                    event.turn_metric_id = turn_id
-                    await judge_worker.process(
-                        turn_id, event.question,
-                        event.episode_texts + event.kg_texts,
-                        event.answer,
-                    )
-                    await retrieval_eval_worker.process(turn_id, event)
+            try:
+                event = await eval_bus.get()
+                if event.is_question_mode:
+                    await retrieval_eval_worker.process(None, event)
+                else:
+                    turn_id = await token_worker.process(event)
+                    if turn_id:
+                        event.turn_metric_id = turn_id
+                        await judge_worker.process(
+                            turn_id, event.question,
+                            event.episode_texts + event.kg_texts,
+                            event.answer,
+                        )
+                        await retrieval_eval_worker.process(turn_id, event)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("_eval_consumer: error processing event, continuing")
 
     consumer_task = asyncio.create_task(_eval_consumer())
     try:
@@ -147,7 +154,7 @@ async def chat_stream(
         t_start = time.perf_counter()
 
         invoke_task = asyncio.create_task(
-            asyncio.to_thread(session.graph.invoke, {"user_input": req.message})
+            asyncio.to_thread(session.graph.invoke, {"user_input": req.message, "query_mode": req.mode})
         )
 
         for step in ("ep", "kg", "mrg"):
@@ -214,19 +221,20 @@ async def chat_stream(
         )
         yield _sse("done", done_payload.model_dump())
 
+        ep_texts = [ep.content for ep in (retrieved_episodes or [])]
+        kg_texts = [ln.strip() for ln in kg_context.splitlines() if ln.strip()]
+
         if req.mode == "question":
             try:
                 from memoryweave.eval.events import TurnEvent
-                kg_texts_q = [ln.strip() for ln in kg_context.splitlines() if ln.strip()]
-                ep_texts_q = [ep.content for ep in (retrieved_episodes or [])]
                 eval_bus.emit(TurnEvent(
                     session_id=req.session_id,
                     user_id=user_session.user_id,
                     turn_number=session.turn_count,
                     question=req.message,
                     answer=response_text,
-                    episode_texts=ep_texts_q,
-                    kg_texts=kg_texts_q,
+                    episode_texts=ep_texts,
+                    kg_texts=kg_texts,
                     episode_embeddings=[],
                     kg_embedding=[],
                     system_tokens=token_estimate,
@@ -236,13 +244,14 @@ async def chat_stream(
                     is_question_mode=True,
                 ))
             except Exception:
-                pass
+                logger.exception("eval_bus emit failed for question mode turn %d", session.turn_count)
         else:
             await session.write_turn_async(
                 req.message,
                 response_text,
                 total_latency_ms=int(latency * 1000),
                 kg_context=kg_context,
+                retrieved_episode_texts=ep_texts,
             )
             yield _sse("memory_updated", {})
 

@@ -49,11 +49,10 @@ class KnowledgeGraphStore:
         if not self._node_embeddings:
             return []
         q_vec = self._embed(query)
-        # dot product cosine (vectors are unit-normalised by bge-small)
+        mag_q = math.sqrt(sum(a * a for a in q_vec))
         scores: dict[str, float] = {}
         for name, vec in self._node_embeddings.items():
             dot = sum(a * b for a, b in zip(q_vec, vec))
-            mag_q = math.sqrt(sum(a * a for a in q_vec))
             mag_v = math.sqrt(sum(a * a for a in vec))
             scores[name] = dot / (mag_q * mag_v + 1e-9)
         ranked = sorted(scores, key=lambda k: scores[k], reverse=True)
@@ -108,7 +107,8 @@ class KnowledgeGraphStore:
 
         heap: list[tuple[float, int, int, str, str]] = []
         visited: set[str] = set(seed_names)
-        results: list[tuple[str, dict]] = []
+        # Seeds always included so their own descriptions appear in context
+        results: list[tuple[str, dict]] = [(s, dict(self._graph.nodes[s])) for s in seed_names]
         traversed_edges: list[tuple[str, str]] = []
         _ctr = 0
 
@@ -116,6 +116,11 @@ class KnowledgeGraphStore:
             for _, nbr, data in self._graph.out_edges(seed, data=True):
                 heapq.heappush(heap, (-data["weight"], _ctr, 0, seed, nbr))
                 _ctr += 1
+            # Bidirectional: in-edges surface nodes that point TO the seed
+            for src, _, data in self._graph.in_edges(seed, data=True):
+                if src not in visited:
+                    heapq.heappush(heap, (-data.get("weight", 1.0), _ctr, 0, seed, src))
+                    _ctr += 1
 
         while heap and len(results) < node_budget:
             neg_w, _, depth, parent, node = heapq.heappop(heap)
@@ -129,6 +134,10 @@ class KnowledgeGraphStore:
                 for _, nbr, data in self._graph.out_edges(node, data=True):
                     if nbr not in visited:
                         heapq.heappush(heap, (-data["weight"], _ctr, depth + 1, node, nbr))
+                        _ctr += 1
+                for src, _, data in self._graph.in_edges(node, data=True):
+                    if src not in visited:
+                        heapq.heappush(heap, (-data.get("weight", 1.0), _ctr, depth + 1, node, src))
                         _ctr += 1
 
         self._reinforce(traversed_edges)
@@ -152,16 +161,22 @@ class KnowledgeGraphStore:
             label = f"{name} ({t})" if t else name
             entity_lines.append(f"- {label}: {d}" if d else f"- {label}")
 
-        # Section 2: relationships as plain (subject, predicate, object) triples
-        # Only include edges where both ends are in the retrieved subgraph
+        # Section 2: relationships as (subject, predicate, object) triples.
+        # Include ALL edges from/to retrieved nodes, not just intra-subgraph ones,
+        # so cross-boundary relationships are never silently dropped.
         seen: set[tuple[str, str]] = set()
         triple_lines = []
         for name, _ in nodes:
             for _, nbr, data in self._graph.out_edges(name, data=True):
-                if nbr in node_names and (name, nbr) not in seen:
+                if (name, nbr) not in seen:
                     seen.add((name, nbr))
                     rel = data.get("rel_type", "related_to").replace("_", " ")
                     triple_lines.append(f"  ({name}, {rel}, {nbr})")
+            for src, _, data in self._graph.in_edges(name, data=True):
+                if (src, name) not in seen:
+                    seen.add((src, name))
+                    rel = data.get("rel_type", "related_to").replace("_", " ")
+                    triple_lines.append(f"  ({src}, {rel}, {name})")
 
         parts = ["Entities:"] + entity_lines
         if triple_lines:

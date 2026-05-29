@@ -24,10 +24,12 @@ def build_context_block(
         final_working = working
         used += len(working)
 
-    # KG context next (richer signal)
-    if kg and used + len(kg) <= char_budget:
-        final_kg = kg
-        used += len(kg)
+    # KG context next (richer signal) — truncate to available budget, never drop entirely
+    if kg:
+        available = char_budget - used
+        if available > 0:
+            final_kg = kg[:available]
+            used += len(final_kg)
 
     # Episodes fill remaining budget
     if episodes:

@@ -40,6 +40,7 @@ class SessionState:
         *,
         total_latency_ms: int = 0,
         kg_context: str = "",
+        retrieved_episode_texts: list[str] | None = None,
     ) -> None:
         """Run memory-write operations in the background after the response is streamed."""
         msgs = [HumanMessage(content=user_input), AIMessage(content=response)]
@@ -56,7 +57,9 @@ class SessionState:
             from memoryweave.api.app import eval_bus
             from memoryweave.eval.events import TurnEvent
 
-            retrieved_episodes = self.episodic.retrieve(user_input)
+            # Use the already-retrieved episodes from the graph run — avoids a second
+            # network call to Qdrant/ChromaDB that could fail and drop the eval event.
+            ep_texts = retrieved_episode_texts if retrieved_episode_texts is not None else []
             kg_texts = [ln.strip() for ln in kg_context.splitlines() if ln.strip()]
             event = TurnEvent(
                 session_id=self.session_id,
@@ -64,7 +67,7 @@ class SessionState:
                 turn_number=self.turn_count,
                 question=user_input,
                 answer=response,
-                episode_texts=[ep.content for ep in retrieved_episodes],
+                episode_texts=ep_texts,
                 kg_texts=kg_texts,
                 episode_embeddings=[],
                 kg_embedding=[],
