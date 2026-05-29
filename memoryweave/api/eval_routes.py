@@ -63,6 +63,19 @@ async def get_sessions(
     ]
 
 
+@router.get("/retrieval")
+async def get_retrieval_evals(
+    session_id: str = Query(...),
+    limit: int = Query(50, le=200),
+    session: UserSession = Depends(verify_session),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    repo = PostgresMetricsRepository(pool)
+    turns = await repo.list_retrieval_evals(session_id, limit=limit)
+    summary = await repo.get_retrieval_summary(session_id)
+    return {"summary": summary, "turns": turns}
+
+
 @router.get("/health")
 async def eval_health():
     from memoryweave.api.app import eval_bus, judge_worker

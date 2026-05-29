@@ -25,9 +25,41 @@ type Turn = {
 
 type Health = { judge_status: 'active' | 'circuit_open'; queue_depth: number };
 
+type RetrievalSummary = {
+  total: number;
+  avg_context_relevance: number | null;
+  avg_faithfulness: number | null;
+  avg_answer_relevance: number | null;
+  kg_seed_hit_rate: number | null;
+  avg_episode_count: number | null;
+  avg_kg_node_count: number | null;
+};
+
+type RetrievalTurn = {
+  turn_number: number;
+  kg_seed_found: boolean;
+  episode_count: number;
+  kg_node_count: number;
+  context_relevance: number | null;
+  faithfulness: number | null;
+  answer_relevance: number | null;
+  reasoning: string | null;
+};
+
 interface Props {
   sessionId: string;
   memoryState?: MemoryState | null;
+}
+
+function ragsColor(v: number | null) {
+  if (v == null) return 'var(--fg-4)';
+  if (v >= 0.7) return 'var(--ok)';
+  if (v >= 0.5) return 'var(--warn)';
+  return 'var(--danger)';
+}
+
+function fmtScore(v: number | null) {
+  return v != null ? (v * 100).toFixed(0) + '%' : '—';
 }
 
 function effClass(v: number) {
@@ -48,6 +80,9 @@ export default function EvalDashboard({ sessionId, memoryState }: Props) {
   const [health, setHealth] = useState<Health | null>(null);
   const [hoveredTurn, setHoveredTurn] = useState<number | null>(null);
   const [expandedTurn, setExpandedTurn] = useState<number | null>(null);
+  const [retrievalSummary, setRetrievalSummary] = useState<RetrievalSummary | null>(null);
+  const [retrievalTurns, setRetrievalTurns] = useState<RetrievalTurn[]>([]);
+  const [expandedRetTurn, setExpandedRetTurn] = useState<number | null>(null);
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
   const load = useCallback(() => {
@@ -58,6 +93,13 @@ export default function EvalDashboard({ sessionId, memoryState }: Props) {
     fetch(`${apiUrl}/eval/health`, { credentials: 'include' })
       .then(r => r.json())
       .then(setHealth)
+      .catch(() => {});
+    fetch(`${apiUrl}/eval/retrieval?session_id=${sessionId}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => {
+        if (d.summary && Object.keys(d.summary).length > 0) setRetrievalSummary(d.summary);
+        if (d.turns) setRetrievalTurns(d.turns);
+      })
       .catch(() => {});
   }, [sessionId, apiUrl]);
 
@@ -274,6 +316,92 @@ export default function EvalDashboard({ sessionId, memoryState }: Props) {
             </div>
           </div>
         )}
+
+        {/* ── Retrieval Quality Eval ── */}
+        <div className="eval-section" style={{ marginTop: 24 }}>
+          <div className="eval-section-head">
+            <span>Retrieval Quality</span>
+            <span style={{ fontWeight: 400, color: 'var(--fg-4)', textTransform: 'none', letterSpacing: 0 }}>
+              RAGAS-inspired · context relevance · faithfulness · answer relevance
+            </span>
+          </div>
+
+          {retrievalSummary ? (
+            <>
+              <div className="eval-kpis" style={{ padding: '14px 16px 0' }}>
+                {[
+                  { label: 'Context relevance', value: fmtScore(retrievalSummary.avg_context_relevance), color: ragsColor(retrievalSummary.avg_context_relevance), sub: 'retrieved facts useful?' },
+                  { label: 'Faithfulness', value: fmtScore(retrievalSummary.avg_faithfulness), color: ragsColor(retrievalSummary.avg_faithfulness), sub: 'answer stays in context?' },
+                  { label: 'Answer relevance', value: fmtScore(retrievalSummary.avg_answer_relevance), color: ragsColor(retrievalSummary.avg_answer_relevance), sub: 'answer addresses query?' },
+                  { label: 'KG seed hit rate', value: retrievalSummary.kg_seed_hit_rate != null ? (retrievalSummary.kg_seed_hit_rate * 100).toFixed(0) + '%' : '—', color: ragsColor(retrievalSummary.kg_seed_hit_rate), sub: 'KG triggered / total queries' },
+                ].map(k => (
+                  <div className="eval-kpi" key={k.label}>
+                    <div className="eval-kpi-label">{k.label}</div>
+                    <div className="eval-kpi-value" style={{ color: k.color }}>{k.value}</div>
+                    <div className="eval-kpi-sub">{k.sub}</div>
+                  </div>
+                ))}
+              </div>
+
+              {retrievalTurns.length > 0 && (
+                <div style={{ padding: '14px 16px 18px' }}>
+                  <table className="eval-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>KG seed</th>
+                        <th>Episodes</th>
+                        <th>KG nodes</th>
+                        <th>Ctx rel</th>
+                        <th>Faithful</th>
+                        <th>Ans rel</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...retrievalTurns].sort((a, b) => a.turn_number - b.turn_number).map(t => {
+                        const isExp = expandedRetTurn === t.turn_number;
+                        return (
+                          <Fragment key={t.turn_number}>
+                            <tr
+                              className={isExp ? 'expanded' : ''}
+                              onClick={() => setExpandedRetTurn(isExp ? null : t.turn_number)}
+                            >
+                              <td style={{ color: 'var(--fg-3)' }}>t{t.turn_number}</td>
+                              <td>
+                                <span className={`eval-kg-dot ${t.kg_seed_found ? 'eval-kg-dot--yes' : 'eval-kg-dot--no'}`} />
+                              </td>
+                              <td style={{ color: 'var(--fg-3)' }}>{t.episode_count}</td>
+                              <td style={{ color: 'var(--fg-3)' }}>{t.kg_node_count}</td>
+                              <td style={{ color: ragsColor(t.context_relevance) }}>{fmtScore(t.context_relevance)}</td>
+                              <td style={{ color: ragsColor(t.faithfulness) }}>{fmtScore(t.faithfulness)}</td>
+                              <td style={{ color: ragsColor(t.answer_relevance) }}>{fmtScore(t.answer_relevance)}</td>
+                            </tr>
+                            {isExp && t.reasoning && (
+                              <tr>
+                                <td colSpan={7} style={{ padding: 0, borderBottom: '1px solid var(--line-1)' }}>
+                                  <div className="erd-inner">
+                                    <div className="erd-item" style={{ gridColumn: '1 / -1' }}>
+                                      <div className="erd-label">LLM reasoning</div>
+                                      <div className="erd-value" style={{ color: 'var(--fg-2)', fontStyle: 'italic' }}>{t.reasoning}</div>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="eval-empty" style={{ padding: '24px 16px' }}>
+              <p>No retrieval evals yet — use the Question window to trigger KG queries.</p>
+            </div>
+          )}
+        </div>
 
       </div>
     </div>

@@ -23,6 +23,7 @@ from memoryweave.eval.judges.heuristic_judge import HeuristicJudge
 from memoryweave.eval.judges.ragas_judge import RagasJudge
 from memoryweave.eval.repository.postgres_repo import PostgresMetricsRepository
 from memoryweave.eval.workers.judge import LLMJudgeWorker
+from memoryweave.eval.workers.retrieval_eval import RetrievalEvalWorker
 from memoryweave.eval.workers.token_metrics import TokenMetricsWorker
 from memoryweave.eval.workers.forgetting import ForgettingTracker
 
@@ -49,14 +50,15 @@ from memoryweave.core.llm import extract_text
 
 eval_bus = EvalEventBus()
 forgetting_tracker = ForgettingTracker()
-judge_worker: LLMJudgeWorker = None  # initialized in lifespan
+judge_worker: LLMJudgeWorker = None          # initialized in lifespan
+retrieval_eval_worker: RetrievalEvalWorker = None  # initialized in lifespan
 
 
 # ── Lifespan context manager ──────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global judge_worker
+    global judge_worker, retrieval_eval_worker
     await init_pool()
     await init_redis()
     await init_db()
@@ -64,6 +66,7 @@ async def lifespan(app: FastAPI):
     pool = get_pool()
     repo = PostgresMetricsRepository(pool)
     token_worker = TokenMetricsWorker(repo)
+    retrieval_eval_worker = RetrievalEvalWorker(pool)
 
     backend = settings.eval_judge_backend
     judge = RagasJudge() if backend == "ragas" else HeuristicJudge()
@@ -76,14 +79,19 @@ async def lifespan(app: FastAPI):
     async def _eval_consumer():
         while True:
             event = await eval_bus.get()
-            turn_id = await token_worker.process(event)
-            if turn_id:
-                event.turn_metric_id = turn_id
-                await judge_worker.process(
-                    turn_id, event.question,
-                    event.episode_texts + event.kg_texts,
-                    event.answer,
-                )
+            if event.is_question_mode:
+                # Question mode: retrieval-quality eval only, no token metrics
+                await retrieval_eval_worker.process("", event)
+            else:
+                turn_id = await token_worker.process(event)
+                if turn_id:
+                    event.turn_metric_id = turn_id
+                    await judge_worker.process(
+                        turn_id, event.question,
+                        event.episode_texts + event.kg_texts,
+                        event.answer,
+                    )
+                    await retrieval_eval_worker.process(turn_id, event)
 
     consumer_task = asyncio.create_task(_eval_consumer())
     try:
@@ -206,7 +214,30 @@ async def chat_stream(
         )
         yield _sse("done", done_payload.model_dump())
 
-        if req.mode != "question":
+        if req.mode == "question":
+            try:
+                from memoryweave.eval.events import TurnEvent
+                kg_texts_q = [ln.strip() for ln in kg_context.splitlines() if ln.strip()]
+                ep_texts_q = [ep.content for ep in (retrieved_episodes or [])]
+                eval_bus.emit(TurnEvent(
+                    session_id=req.session_id,
+                    user_id=user_session.user_id,
+                    turn_number=session.turn_count,
+                    question=req.message,
+                    answer=response_text,
+                    episode_texts=ep_texts_q,
+                    kg_texts=kg_texts_q,
+                    episode_embeddings=[],
+                    kg_embedding=[],
+                    system_tokens=token_estimate,
+                    naive_tokens=token_estimate,
+                    retrieval_latency_ms=0,
+                    total_latency_ms=int(latency * 1000),
+                    is_question_mode=True,
+                ))
+            except Exception:
+                pass
+        else:
             await session.write_turn_async(
                 req.message,
                 response_text,

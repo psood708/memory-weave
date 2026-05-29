@@ -19,3 +19,4 @@ class TurnEvent:
     total_latency_ms: int
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     turn_metric_id: str = ""
+    is_question_mode: bool = False
