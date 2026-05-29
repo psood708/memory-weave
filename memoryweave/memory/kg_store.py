@@ -1,4 +1,5 @@
 import heapq
+import math
 
 import networkx as nx
 
@@ -13,6 +14,50 @@ class KnowledgeGraphStore:
         self._user_id = user_id
         self._graph: nx.DiGraph = nx.DiGraph()
         self._call_count: int = 0
+        self._node_embeddings: dict[str, list[float]] = {}
+        self._embedder = None  # lazy init — model loads on first semantic search
+
+    # ── Embedding helpers ─────────────────────────────────────────────────────
+
+    def _get_embedder(self):
+        if self._embedder is None:
+            from fastembed import TextEmbedding
+            self._embedder = TextEmbedding("BAAI/bge-small-en-v1.5")
+        return self._embedder
+
+    def _embed(self, text: str) -> list[float]:
+        return list(next(self._get_embedder().embed([text])))
+
+    def _node_text(self, name: str, attrs: dict) -> str:
+        desc = attrs.get("description", "")
+        return f"{name}: {desc}" if desc else name
+
+    def _rebuild_embeddings(self) -> None:
+        """Batch-embed all nodes in the graph. Called after load()."""
+        nodes = list(self._graph.nodes(data=True))
+        if not nodes:
+            return
+        texts = [self._node_text(name, attrs) for name, attrs in nodes]
+        embedder = self._get_embedder()
+        vecs = list(embedder.embed(texts))
+        self._node_embeddings = {name: list(vec) for (name, _), vec in zip(nodes, vecs)}
+
+    def semantic_seed_search(self, query: str, top_k: int = 4, threshold: float = 0.25) -> list[str]:
+        """Return top-k node names by cosine similarity to query. Falls back to [] on empty graph."""
+        if not self._node_embeddings and self._graph.number_of_nodes() > 0:
+            self._rebuild_embeddings()
+        if not self._node_embeddings:
+            return []
+        q_vec = self._embed(query)
+        # dot product cosine (vectors are unit-normalised by bge-small)
+        scores: dict[str, float] = {}
+        for name, vec in self._node_embeddings.items():
+            dot = sum(a * b for a, b in zip(q_vec, vec))
+            mag_q = math.sqrt(sum(a * a for a in q_vec))
+            mag_v = math.sqrt(sum(a * a for a in vec))
+            scores[name] = dot / (mag_q * mag_v + 1e-9)
+        ranked = sorted(scores, key=lambda k: scores[k], reverse=True)
+        return [n for n in ranked[:top_k] if scores[n] >= threshold]
 
     # ── Persistence ───────────────────────────────────────────────────────────
 
@@ -20,6 +65,7 @@ class KnowledgeGraphStore:
         data = await self._backend.load(self._user_id)
         if data:
             self._graph = nx.node_link_graph(data, directed=True, multigraph=False)
+            self._rebuild_embeddings()
         else:
             self._graph = nx.DiGraph()
 
@@ -38,6 +84,10 @@ class KnowledgeGraphStore:
             self._graph.nodes[name]["description"] = description
         else:
             self._graph.add_node(name, type=type_, description=description)
+        # keep embedding cache in sync — only if embedder already loaded
+        if self._embedder is not None:
+            attrs = {"type": type_, "description": description}
+            self._node_embeddings[name] = self._embed(self._node_text(name, attrs))
 
     def upsert_edge(self, source: str, target: str, rel_type: str, weight: float = 1.0) -> None:
         if not self._graph.has_edge(source, target):

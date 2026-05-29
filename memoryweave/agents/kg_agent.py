@@ -125,9 +125,12 @@ class KGAgent:
             return FusedResult(importance_score=0.0, entities=[], relationships=[])
 
     def find_seed_nodes(self, text: str) -> list[str]:
-        """Return graph node names that appear (case-insensitive) in text."""
+        """Exact name match first; semantic embedding fallback for vague queries."""
         text_lower = text.lower()
-        return [n for n in self._store._graph.nodes if n.lower() in text_lower]
+        exact = [n for n in self._store._graph.nodes if n.lower() in text_lower]
+        if exact:
+            return exact
+        return self._store.semantic_seed_search(text, top_k=4, threshold=0.25)
 
     def retrieve_context(self, entity_ids: list[str]) -> str:
         """Read path: traverse graph from entity_ids, return formatted context string."""
