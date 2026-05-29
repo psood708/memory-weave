@@ -39,10 +39,14 @@ def build_context_block(
 
 def format_context_block(block: ContextBlock) -> str:
     parts = []
-    if block.working_memory:
-        parts.append(f"[WORKING MEMORY]\n{block.working_memory}")
-    if block.episodes:
-        parts.append(f"[RELEVANT EPISODES]\n{block.episodes}")
     if block.kg_context:
-        parts.append(f"[KNOWLEDGE GRAPH CONTEXT]\n{block.kg_context}")
+        parts.append(
+            "### Memory — Knowledge Graph\n"
+            "Answer ONLY from the facts below. Do not go beyond this context.\n\n"
+            + block.kg_context
+        )
+    if block.episodes:
+        parts.append("### Memory — Past Episodes\n" + block.episodes)
+    if block.working_memory:
+        parts.append("### Current Conversation\n" + block.working_memory)
     return "\n\n".join(parts)

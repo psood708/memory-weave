@@ -135,18 +135,87 @@ class KnowledgeGraphStore:
         return results
 
     def format_context(self, nodes: list[tuple[str, dict]]) -> str:
+        """
+        SubgraphRAG-style linearized format: entity descriptions + clean relationship triples.
+        No raw weights or graph internals — safe to inject directly into the LLM prompt.
+        """
         if not nodes:
             return ""
-        lines = []
+
+        node_names = {name for name, _ in nodes}
+
+        # Section 1: entity descriptions in prose
+        entity_lines = []
         for name, attrs in nodes:
             t = attrs.get("type", "")
             d = attrs.get("description", "")
-            lines.append(f"[{name}] ({t}) — {d}")
-            for src, _, data in self._graph.in_edges(name, data=True):
-                lines.append(f"  ← {data['rel_type']} ← [{src}] (weight: {data['weight']:.2f})")
+            label = f"{name} ({t})" if t else name
+            entity_lines.append(f"- {label}: {d}" if d else f"- {label}")
+
+        # Section 2: relationships as plain (subject, predicate, object) triples
+        # Only include edges where both ends are in the retrieved subgraph
+        seen: set[tuple[str, str]] = set()
+        triple_lines = []
+        for name, _ in nodes:
             for _, nbr, data in self._graph.out_edges(name, data=True):
-                lines.append(f"  → {data['rel_type']} → [{nbr}] (weight: {data['weight']:.2f})")
-        return "\n".join(lines)
+                if nbr in node_names and (name, nbr) not in seen:
+                    seen.add((name, nbr))
+                    rel = data.get("rel_type", "related_to").replace("_", " ")
+                    triple_lines.append(f"  ({name}, {rel}, {nbr})")
+
+        parts = ["Entities:"] + entity_lines
+        if triple_lines:
+            parts += ["\nRelationships:"] + triple_lines
+        return "\n".join(parts)
+
+    def traverse_ppr(
+        self,
+        seed_names: list[str],
+        max_nodes: int = 12,
+        damping: float = 0.5,
+    ) -> list[tuple[str, dict]]:
+        """
+        Personalized PageRank traversal — HippoRAG (Gutierrez et al., 2024).
+        Explores all seed neighbourhoods jointly so multi-entity queries surface
+        connecting nodes that BFS misses. Hebbian edge weights drive transition probs.
+        Falls back to BFS for single-seed queries (PPR degenerates there).
+        """
+        seeds = [n for n in seed_names if self._graph.has_node(n)]
+        if not seeds:
+            return []
+        if len(seeds) == 1:
+            return self.traverse(seeds, max_hops=2, node_budget=max_nodes)
+
+        # IDF-style specificity: nodes with fewer edges get higher seed weight
+        # (HippoRAG insight: rare/specific nodes are better anchors)
+        raw_weights = {s: 1.0 / max(self._graph.degree(s), 1) for s in seeds}
+        total = sum(raw_weights.values())
+        personalization = {s: w / total for s, w in raw_weights.items()}
+
+        try:
+            scores = nx.pagerank(
+                self._graph,
+                alpha=damping,
+                personalization=personalization,
+                weight="weight",
+                max_iter=100,
+            )
+        except nx.PowerIterationFailedConvergence:
+            return self.traverse(seeds, max_hops=2, node_budget=max_nodes)
+
+        seed_set = set(seeds)
+        ranked = sorted(
+            [(n, s) for n, s in scores.items() if n not in seed_set],
+            key=lambda x: x[1],
+            reverse=True,
+        )[:max_nodes - len(seeds)]
+
+        result = [(s, dict(self._graph.nodes[s])) for s in seeds]
+        result += [(n, dict(self._graph.nodes[n])) for n, _ in ranked]
+
+        if ranked:
+            self._reinforce([(seeds[0], ranked[0][0])])
+        return result
 
     # ── Maintenance ───────────────────────────────────────────────────────────
 
