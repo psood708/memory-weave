@@ -2854,6 +2854,38 @@ input, textarea { font: inherit; color: inherit; }
 }
 .gfs-meta-kv b { color: var(--fg-2); font-weight: 600; text-transform: none; letter-spacing: 0; }
 
+.gfs-history {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.gfs-history-turn {
+  padding: 18px 0 18px;
+  border-bottom: 1px solid var(--line-1);
+}
+.gfs-history-turn:last-child { border-bottom: none; }
+.gfs-history-q {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.gfs-history-q-label {
+  flex-shrink: 0;
+  font: 700 9.5px/1 var(--font-mono);
+  color: var(--kg);
+  background: color-mix(in srgb, var(--kg) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--kg) 30%, transparent);
+  border-radius: 4px;
+  padding: 2px 5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.gfs-history-q span {
+  font: 500 13px/1.55 var(--font-sans);
+  color: var(--fg-2);
+}
+
 /* ============ Home page ============ */
 
 body.home-page {

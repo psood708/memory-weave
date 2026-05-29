@@ -260,6 +260,13 @@ export default function GraphPanel({
   const panStartRef     = useRef({ mx: 0, my: 0, px: 0, py: 0 });
   const qbarRef         = useRef<HTMLInputElement | null>(null);
 
+  type HistoryItem = {
+    question: string;
+    answer: string;
+    meta: { episodes: number; hops: number; tokens: number; latency: number } | null;
+    streaming: boolean;
+  };
+
   const [size,         setSize]         = useState({ w: 360, h: 380 });
   const [zoom,         setZoom]         = useState(1);
   const [pan,          setPan]          = useState({ x: 0, y: 0 });
@@ -270,9 +277,10 @@ export default function GraphPanel({
   const [fullscreen,   setFullscreen]   = useState(false);
   const [showExport,   setShowExport]   = useState(false);
   const [queryText,    setQueryText]    = useState('');
-  const [answer,       setAnswer]       = useState('');
-  const [answerMeta,   setAnswerMeta]   = useState<{ episodes: number; hops: number; tokens: number; latency: number } | null>(null);
-  const [streaming,    setStreaming]     = useState(false);
+  const [history,      setHistory]      = useState<HistoryItem[]>([]);
+  const historyEndRef  = useRef<HTMLDivElement | null>(null);
+
+  const streaming = history.length > 0 && history[history.length - 1].streaming;
 
   // Measure canvas on mount and when fullscreen toggles
   useEffect(() => {
@@ -402,21 +410,32 @@ export default function GraphPanel({
 
   const resetView = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
 
+  // Auto-scroll history to bottom on new content
+  useEffect(() => {
+    historyEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [history]);
+
   // ── Question bar (fullscreen) ──────────────────────────────────────────────
   const onAsk = () => {
     const text = queryText.trim();
     if (!text || !sessionId || streaming) return;
     stopChatRef.current?.();
-    setAnswer('');
-    setAnswerMeta(null);
-    setStreaming(true);
+    setQueryText('');
+    setHistory(h => [...h, { question: text, answer: '', meta: null, streaming: true }]);
     let acc = '';
     stopChatRef.current = streamChat(sessionId, text, provider, 'question', {
       onAgentStep: () => {},
-      onToken: (t) => { acc += t; setAnswer(acc); },
-      onDone: (meta) => { setAnswerMeta(meta); setStreaming(false); },
+      onToken: (t) => {
+        acc += t;
+        setHistory(h => h.map((item, i) => i === h.length - 1 ? { ...item, answer: acc } : item));
+      },
+      onDone: (meta) => {
+        setHistory(h => h.map((item, i) => i === h.length - 1 ? { ...item, meta, streaming: false } : item));
+      },
       onMemoryUpdated: () => {},
-      onError: () => setStreaming(false),
+      onError: () => {
+        setHistory(h => h.map((item, i) => i === h.length - 1 ? { ...item, streaming: false } : item));
+      },
     });
   };
 
@@ -590,44 +609,63 @@ export default function GraphPanel({
           </div>
         </div>
 
-        {/* Right: answer */}
+        {/* Right: conversation history */}
         <div className="gfs-right">
           <div className="gfs-answer-header">
             {streaming
               ? <><span className="gfs-live-dot" />Retrieving…</>
-              : answerMeta
-                ? <>Answer · {answerMeta.latency}s</>
-                : <>Answer</>
+              : history.length > 0
+                ? <>History · {history.length} {history.length === 1 ? 'query' : 'queries'}</>
+                : <>Query History</>
             }
+            {history.length > 0 && !streaming && (
+              <button
+                className="icon-btn"
+                style={{ marginLeft: 'auto', opacity: 0.5 }}
+                data-tooltip="Clear history"
+                onClick={() => setHistory([])}
+              >
+                <Icon name="close" size={11} />
+              </button>
+            )}
           </div>
           <div className="gfs-answer-body">
-            {!answer && !streaming ? (
+            {history.length === 0 ? (
               <div className="gfs-answer-empty">
                 <Icon name="graph" size={28} style={{ color: 'var(--fg-4)', marginBottom: 8 }} />
                 <p>Ask a question about your knowledge graph.</p>
                 <p style={{ color: 'var(--fg-4)', fontSize: 11, marginTop: 4 }}>Retrieved from episodic memory + graph context.</p>
               </div>
             ) : (
-              <>
-                <div className="gfs-answer-text">
-                  <BotMarkdown text={answer} />
-                  {streaming && <span className="gfs-answer-cursor" />}
-                </div>
-                {answerMeta && !streaming && (
-                  <div className="gfs-answer-meta">
-                    {[
-                      { k: 'episodes', v: answerMeta.episodes },
-                      { k: 'hops', v: answerMeta.hops },
-                      { k: 'tokens', v: answerMeta.tokens },
-                      { k: 'latency', v: `${answerMeta.latency}s` },
-                    ].map(m => (
-                      <div className="gfs-meta-kv" key={m.k}>
-                        {m.k} <b>{String(m.v)}</b>
+              <div className="gfs-history">
+                {history.map((item, idx) => (
+                  <div className="gfs-history-turn" key={idx}>
+                    <div className="gfs-history-q">
+                      <span className="gfs-history-q-label">Q</span>
+                      <span>{item.question}</span>
+                    </div>
+                    <div className="gfs-answer-text">
+                      <BotMarkdown text={item.answer} />
+                      {item.streaming && <span className="gfs-answer-cursor" />}
+                    </div>
+                    {item.meta && !item.streaming && (
+                      <div className="gfs-answer-meta">
+                        {[
+                          { k: 'episodes', v: item.meta.episodes },
+                          { k: 'hops', v: item.meta.hops },
+                          { k: 'tokens', v: item.meta.tokens },
+                          { k: 'latency', v: `${item.meta.latency}s` },
+                        ].map(m => (
+                          <div className="gfs-meta-kv" key={m.k}>
+                            {m.k} <b>{String(m.v)}</b>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
-              </>
+                ))}
+                <div ref={historyEndRef} />
+              </div>
             )}
           </div>
         </div>
