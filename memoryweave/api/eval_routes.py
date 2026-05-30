@@ -1,5 +1,5 @@
 import asyncpg
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from memoryweave.auth.models import UserSession
 from memoryweave.auth.session import verify_session
@@ -16,6 +16,10 @@ async def get_metrics(
     session: UserSession = Depends(verify_session),
     pool: asyncpg.Pool = Depends(get_pool),
 ):
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT user_id FROM sessions WHERE id = $1", session_id)
+        if row is not None and row["user_id"] is not None and row["user_id"] != session.user_id:
+            raise HTTPException(status_code=403, detail="Not authorized to access this session")
     repo = PostgresMetricsRepository(pool)
     turns = await repo.list_turns(session_id, limit=limit)
     summary = await repo.get_session_summary(session_id)
@@ -70,6 +74,10 @@ async def get_retrieval_evals(
     session: UserSession = Depends(verify_session),
     pool: asyncpg.Pool = Depends(get_pool),
 ):
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT user_id FROM sessions WHERE id = $1", session_id)
+        if row is not None and row["user_id"] is not None and row["user_id"] != session.user_id:
+            raise HTTPException(status_code=403, detail="Not authorized to access this session")
     repo = PostgresMetricsRepository(pool)
     turns = await repo.list_retrieval_evals(session_id, limit=limit)
     summary = await repo.get_retrieval_summary(session_id)

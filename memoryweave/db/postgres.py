@@ -21,10 +21,29 @@ async def close_pool() -> None:
 
 
 async def init_db() -> None:
-    """Run all SQL migrations in filename order. Safe to call on every startup."""
+    """Run pending SQL migrations. Already-applied files are skipped."""
     async with _pool.acquire() as conn:
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                filename   TEXT PRIMARY KEY,
+                applied_at TIMESTAMPTZ DEFAULT NOW()
+            )
+            """
+        )
+        applied = {
+            row["filename"]
+            for row in await conn.fetch("SELECT filename FROM schema_migrations")
+        }
         for migration in sorted(_MIGRATIONS_DIR.glob("*.sql")):
-            await conn.execute(migration.read_text())
+            if migration.name in applied:
+                continue
+            async with conn.transaction():
+                await conn.execute(migration.read_text())
+                await conn.execute(
+                    "INSERT INTO schema_migrations (filename) VALUES ($1)",
+                    migration.name,
+                )
 
 
 async def get_db() -> AsyncGenerator[asyncpg.Connection, None]:

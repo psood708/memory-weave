@@ -62,6 +62,10 @@ retrieval_eval_worker: RetrievalEvalWorker = None  # initialized in lifespan
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global judge_worker, retrieval_eval_worker
+    if "*" in settings.cors_origins:
+        raise RuntimeError(
+            "CORS_ORIGINS must not contain '*' — set it to the explicit frontend origin(s) in your environment."
+        )
     await init_pool()
     await init_redis()
     await init_db()
@@ -287,6 +291,9 @@ async def get_memory(
     db: asyncpg.Connection = Depends(get_db),
 ):
     user_config = await ModelConfigRepo(db).load(user_session.user_id)
+    row = await db.fetchrow("SELECT user_id FROM sessions WHERE id = $1", session_id)
+    if row is not None and row["user_id"] is not None and row["user_id"] != user_session.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this session")
     session: SessionState = await get_or_create_session(session_id, provider, user_config=user_config)
 
     working_turns: list[WorkingTurn] = []
@@ -398,8 +405,9 @@ async def clear_memory(
 ):
     """Wipe stored memory for a session. Only the session owner can clear."""
     row = await db.fetchrow("SELECT user_id FROM sessions WHERE id = $1", req.session_id)
-    if row and row["user_id"] and row["user_id"] != user_session.user_id:
-        raise HTTPException(status_code=403, detail="Not authorized to clear this session")
+    if row is not None:
+        if row["user_id"] is None or row["user_id"] != user_session.user_id:
+            raise HTTPException(status_code=403, detail="Not authorized to clear this session")
 
     user_config = await ModelConfigRepo(db).load(user_session.user_id)
     session: SessionState = await get_or_create_session(req.session_id, req.provider, user_config=user_config)
