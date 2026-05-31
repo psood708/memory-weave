@@ -1,5 +1,9 @@
 import asyncio
+import logging
+
 from memoryweave.eval.events import TurnEvent
+
+logger = logging.getLogger(__name__)
 
 
 class EvalEventBus:
@@ -10,7 +14,11 @@ class EvalEventBus:
         try:
             self._queue.put_nowait(event)
         except asyncio.QueueFull:
-            pass  # drop event rather than block — eval must never affect the hot path
+            logger.warning(
+                "EvalEventBus: queue full (maxsize=%d), dropping event for session=%s",
+                self._queue.maxsize,
+                getattr(event, "session_id", "?"),
+            )
 
     async def get(self) -> TurnEvent:
         return await self._queue.get()

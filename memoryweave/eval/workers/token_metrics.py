@@ -99,5 +99,9 @@ class TokenMetricsWorker:
             await self._repo.write_turn(turn)
             return turn_id
         except Exception:
-            logger.exception("TokenMetricsWorker failed — skipping turn")
+            logger.exception(
+                "TokenMetricsWorker failed [session=%s turn=%s]",
+                getattr(event, "session_id", "?"),
+                getattr(event, "turn_number", "?"),
+            )
             return ""

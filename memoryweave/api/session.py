@@ -23,6 +23,7 @@ class SessionState:
     kg: KGAgent
     last_token_estimate: int = 0
     turn_count: int = 0
+    user_id: str = ""
 
     def update_provider(self, provider: str, user_config=None) -> None:
         """Swap the inference LLM while keeping all memory intact."""
@@ -63,7 +64,7 @@ class SessionState:
             kg_texts = [ln.strip() for ln in kg_context.splitlines() if ln.strip()]
             event = TurnEvent(
                 session_id=self.session_id,
-                user_id=getattr(self, "user_id", ""),
+                user_id=self.user_id,
                 turn_number=self.turn_count,
                 question=user_input,
                 answer=response,
@@ -112,7 +113,7 @@ async def get_or_create_session(
         bundle: GraphWithAgents = await build_read_graph_with_state(
             session_id, provider=provider, user_config=user_config
         )
-        _sessions[key] = SessionState(
+        state = SessionState(
             session_id=session_id,
             provider=provider,
             graph=bundle.graph,
@@ -120,6 +121,8 @@ async def get_or_create_session(
             episodic=bundle.episodic,
             kg=bundle.kg,
         )
+        state.user_id = user_id
+        _sessions[key] = state
         r = get_redis()
         if r is not None:
             await r.setex(

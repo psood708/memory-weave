@@ -87,18 +87,16 @@ async def lifespan(app: FastAPI):
         while True:
             try:
                 event = await eval_bus.get()
-                if event.is_question_mode:
-                    await retrieval_eval_worker.process(None, event)
-                else:
-                    turn_id = await token_worker.process(event)
-                    if turn_id:
-                        event.turn_metric_id = turn_id
+                turn_id = await token_worker.process(event)
+                if turn_id:
+                    event.turn_metric_id = turn_id
+                    await retrieval_eval_worker.process(turn_id, event)
+                    if not event.is_question_mode:
                         await judge_worker.process(
                             turn_id, event.question,
                             event.episode_texts + event.kg_texts,
                             event.answer,
                         )
-                        await retrieval_eval_worker.process(turn_id, event)
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -158,7 +156,19 @@ async def chat_stream(
         t_start = time.perf_counter()
 
         invoke_task = asyncio.create_task(
-            asyncio.to_thread(session.graph.invoke, {"user_input": req.message, "query_mode": req.mode})
+            asyncio.to_thread(
+                session.graph.invoke,
+                {"user_input": req.message, "query_mode": req.mode},
+                {
+                    "run_name": "memoryweave_turn",
+                    "tags": [req.mode, req.provider],
+                    "metadata": {
+                        "session_id": req.session_id,
+                        "user_id": user_session.user_id,
+                        "turn": session.turn_count,
+                    },
+                },
+            )
         )
 
         for step in ("ep", "kg", "mrg"):
@@ -250,12 +260,14 @@ async def chat_stream(
             except Exception:
                 logger.exception("eval_bus emit failed for question mode turn %d", session.turn_count)
         else:
-            await session.write_turn_async(
-                req.message,
-                response_text,
-                total_latency_ms=int(latency * 1000),
-                kg_context=kg_context,
-                retrieved_episode_texts=ep_texts,
+            asyncio.create_task(
+                session.write_turn_async(
+                    req.message,
+                    response_text,
+                    total_latency_ms=int(latency * 1000),
+                    kg_context=kg_context,
+                    retrieved_episode_texts=ep_texts,
+                )
             )
             yield _sse("memory_updated", {})
 

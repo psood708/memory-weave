@@ -105,7 +105,12 @@ class RetrievalEvalWorker:
                 answer_relevance = float(max(0.0, min(1.0, data.get("answer_relevance", 0))))
                 reasoning = data.get("reasoning", "")
         except Exception as e:
-            logger.warning("RetrievalEvalWorker LLM eval failed: %s", e)
+            logger.warning(
+                "RetrievalEvalWorker LLM eval failed [session=%s turn=%s]: %s",
+                getattr(event, "session_id", "?"),
+                getattr(event, "turn_number", "?"),
+                e,
+            )
 
         try:
             await self._write(
@@ -121,7 +126,12 @@ class RetrievalEvalWorker:
                 reasoning=reasoning,
             )
         except Exception as e:
-            logger.warning("RetrievalEvalWorker DB write failed: %s", e)
+            logger.warning(
+                "RetrievalEvalWorker DB write failed [session=%s turn=%s]: %s",
+                getattr(event, "session_id", "?"),
+                getattr(event, "turn_number", "?"),
+                e,
+            )
 
     async def write_structural(self, turn_metric_id: str, event: TurnEvent) -> None:
         """Write only structural metrics (no LLM call) — fast path for question mode."""
@@ -135,7 +145,12 @@ class RetrievalEvalWorker:
                 kg_node_count=0,
             )
         except Exception as e:
-            logger.warning("RetrievalEvalWorker DB write failed: %s", e)
+            logger.warning(
+                "RetrievalEvalWorker DB write failed [session=%s turn=%s]: %s",
+                getattr(event, "session_id", "?"),
+                getattr(event, "turn_number", "?"),
+                e,
+            )
 
     async def _write(
         self,
