@@ -1,4 +1,5 @@
 import asyncio
+import json as _json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -23,6 +24,7 @@ class SessionState:
     kg: KGAgent
     last_token_estimate: int = 0
     turn_count: int = 0
+    user_id: str = ""
 
     def update_provider(self, provider: str, user_config=None) -> None:
         """Swap the inference LLM while keeping all memory intact."""
@@ -40,11 +42,23 @@ class SessionState:
         *,
         total_latency_ms: int = 0,
         kg_context: str = "",
+        retrieved_episode_texts: list[str] | None = None,
     ) -> None:
         """Run memory-write operations in the background after the response is streamed."""
         msgs = [HumanMessage(content=user_input), AIMessage(content=response)]
         for msg in msgs:
             self.working.add(msg)
+
+        from memoryweave.db.redis_client import get_redis
+        r = get_redis()
+        if r is not None:
+            payload = {"messages": self.working.to_json(), "turn_count": self.turn_count}
+            await r.setex(
+                f"working_mem:{self.session_id}:{self.user_id}",
+                _SESSION_TTL,
+                _json.dumps(payload),
+            )
+
         turn_content = f"{user_input}\n{response}"
         fused = await asyncio.to_thread(self.kg.fused_extract, turn_content)
         episode = self.episodic.write(msgs, importance_score=fused.importance_score)
@@ -56,15 +70,17 @@ class SessionState:
             from memoryweave.api.app import eval_bus
             from memoryweave.eval.events import TurnEvent
 
-            retrieved_episodes = self.episodic.retrieve(user_input)
+            # Use the already-retrieved episodes from the graph run — avoids a second
+            # network call to Qdrant/ChromaDB that could fail and drop the eval event.
+            ep_texts = retrieved_episode_texts if retrieved_episode_texts is not None else []
             kg_texts = [ln.strip() for ln in kg_context.splitlines() if ln.strip()]
             event = TurnEvent(
                 session_id=self.session_id,
-                user_id=getattr(self, "user_id", ""),
+                user_id=self.user_id,
                 turn_number=self.turn_count,
                 question=user_input,
                 answer=response,
-                episode_texts=[ep.content for ep in retrieved_episodes],
+                episode_texts=ep_texts,
                 kg_texts=kg_texts,
                 episode_embeddings=[],
                 kg_embedding=[],
@@ -77,6 +93,23 @@ class SessionState:
             eval_bus.emit(event)
         except Exception:
             _logger.exception("eval_bus emit failed — metrics skipped for turn %d", self.turn_count)
+
+
+def _restore_working_mem(state: SessionState, raw: str) -> None:
+    """Load working memory snapshot from a Redis JSON string into state.
+
+    Accepts both the legacy list format (messages only) and the current dict
+    format {messages: [...], turn_count: N} so old snapshots aren't dropped.
+    """
+    data = _json.loads(raw)
+    if isinstance(data, list):
+        messages, turn_count = data, None
+    else:
+        messages, turn_count = data.get("messages", []), data.get("turn_count")
+    state.working.clear()
+    state.working.load_buffer(messages)
+    if turn_count is not None:
+        state.turn_count = turn_count
 
 
 # In-memory session registry: "{session_id}:{user_id}" -> SessionState
@@ -99,7 +132,6 @@ async def get_or_create_session(
     """Return existing session or build a new one, loading KG from PostgreSQL.
     Writes session metadata to Redis (if configured) for cross-instance awareness."""
     from memoryweave.db.redis_client import get_redis
-    import json as _json
 
     user_id = user_config.user_id if user_config else ""
     key = f"{session_id}:{user_id}"
@@ -109,7 +141,7 @@ async def get_or_create_session(
         bundle: GraphWithAgents = await build_read_graph_with_state(
             session_id, provider=provider, user_config=user_config
         )
-        _sessions[key] = SessionState(
+        state = SessionState(
             session_id=session_id,
             provider=provider,
             graph=bundle.graph,
@@ -117,13 +149,18 @@ async def get_or_create_session(
             episodic=bundle.episodic,
             kg=bundle.kg,
         )
+        state.user_id = user_id
         r = get_redis()
         if r is not None:
+            raw = await r.get(f"working_mem:{key}")
+            if raw:
+                _restore_working_mem(state, raw)
             await r.setex(
                 redis_key,
                 _SESSION_TTL,
                 _json.dumps({"provider": provider, "user_id": user_id}),
             )
+        _sessions[key] = state
     else:
         session = _sessions[key]
         if session.provider != provider:
@@ -131,5 +168,9 @@ async def get_or_create_session(
         r = get_redis()
         if r is not None:
             await r.expire(redis_key, _SESSION_TTL)
+            # Resync working memory in case another replica wrote a newer snapshot
+            raw = await r.get(f"working_mem:{key}")
+            if raw:
+                _restore_working_mem(session, raw)
 
     return _sessions[key]

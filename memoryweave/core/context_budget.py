@@ -24,10 +24,12 @@ def build_context_block(
         final_working = working
         used += len(working)
 
-    # KG context next (richer signal)
-    if kg and used + len(kg) <= char_budget:
-        final_kg = kg
-        used += len(kg)
+    # KG context next (richer signal) — truncate to available budget, never drop entirely
+    if kg:
+        available = char_budget - used
+        if available > 0:
+            final_kg = kg[:available]
+            used += len(final_kg)
 
     # Episodes fill remaining budget
     if episodes:
@@ -39,10 +41,14 @@ def build_context_block(
 
 def format_context_block(block: ContextBlock) -> str:
     parts = []
-    if block.working_memory:
-        parts.append(f"[WORKING MEMORY]\n{block.working_memory}")
-    if block.episodes:
-        parts.append(f"[RELEVANT EPISODES]\n{block.episodes}")
     if block.kg_context:
-        parts.append(f"[KNOWLEDGE GRAPH CONTEXT]\n{block.kg_context}")
+        parts.append(
+            "### Memory — Knowledge Graph\n"
+            "Answer ONLY from the facts below. Do not go beyond this context.\n\n"
+            + block.kg_context
+        )
+    if block.episodes:
+        parts.append("### Memory — Past Episodes\n" + block.episodes)
+    if block.working_memory:
+        parts.append("### Current Conversation\n" + block.working_memory)
     return "\n\n".join(parts)

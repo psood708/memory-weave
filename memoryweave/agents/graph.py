@@ -1,3 +1,4 @@
+import logging
 import time
 import uuid
 from dataclasses import dataclass
@@ -5,6 +6,8 @@ from pathlib import Path
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
+
+_log = logging.getLogger(__name__)
 
 from memoryweave.agents.episodic_memory import EpisodicMemoryAgent
 from memoryweave.agents.kg_agent import KGAgent
@@ -14,7 +17,47 @@ from memoryweave.core.context_budget import build_context_block, format_context_
 from memoryweave.core.llm import extract_text, get_llm
 from memoryweave.core.state import MemoryWeaveState
 
-_BASE_SYSTEM = "You are a helpful, context-aware assistant with access to prior conversation memory."
+_BASE_SYSTEM = """\
+You are a memory-aware conversational assistant. You have been given structured \
+memory from past conversations — a knowledge graph of people, projects, and facts, \
+plus episodic recall of specific things discussed.
+
+Rules you must follow:
+1. Answer ONLY using the facts provided in the memory context below. Do not draw on \
+your training data or offer to search the web.
+2. If the memory context does not contain enough to answer, say: \
+"I don't have that in our conversation history yet."
+3. When answering, cite the specific memory naturally in prose — \
+e.g. "Based on what you told me, ..." or "From our earlier conversation, ..."
+4. Do NOT expose raw graph internals (weights, IDs, arrows) in your response. \
+Translate all graph facts into natural, conversational language.
+5. When the memory shows a chain of connections between people or facts, \
+narrate that chain clearly — walk through the links step by step.\
+"""
+
+_QUESTION_SYSTEM = """\
+You are a knowledge graph query engine. The user is directly querying their \
+personal knowledge graph. Your ONLY primary data source is the structured graph \
+context in the "Memory — Knowledge Graph" section below.
+
+Rules — follow these strictly:
+1. Answer PRIMARILY from the "Memory — Knowledge Graph" section (entity descriptions \
+   and relationship triples). If the KG section is populated, it is authoritative.
+2. The knowledge graph contains entity descriptions and relationship triples \
+   of the form (entity, relationship, entity). Use these to build your answer.
+3. You may consult "Memory — Past Episodes" ONLY as a secondary fallback when the \
+   knowledge graph section is empty or silent on the question. Never prefer episodes \
+   over graph facts when both are available.
+4. If neither the graph nor episodes contain enough to answer, respond with: \
+   "The knowledge graph doesn't have that information yet. \
+   Try telling me more about it in a conversation first."
+5. Translate graph facts into natural prose — do not expose node IDs, \
+   edge weights, or internal notation.
+6. For multi-hop queries (how are X and Y connected?), trace every hop \
+   explicitly: "X works on Project A, which is led by Y."
+7. Ignore the "Current Conversation" section entirely — it is not \
+   relevant to a knowledge graph query.\
+"""
 
 
 @dataclass
@@ -233,13 +276,18 @@ def _compile_graph(working: WorkingMemoryAgent, episodic: EpisodicMemoryAgent, k
 
     def kg_node(state: MemoryWeaveState) -> dict:
         seeds = kg.find_seed_nodes(state["user_input"])
-        return {"kg_context": kg.retrieve_context(seeds)}
+        ctx = kg.retrieve_context(seeds)
+        _log.info("[kg_node] query=%r  seeds=%r  ctx_len=%d", state["user_input"][:80], seeds, len(ctx))
+        return {"kg_context": ctx}
 
     def merge_node(state: MemoryWeaveState) -> dict:
+        is_question = state.get("query_mode", "memory") == "question"
         block = build_context_block(
-            working=state["working_context"],
-            episodes=state["episode_context"],
-            kg=state["kg_context"],
+            # Strip working memory for question mode — conversation history
+            # is noise that causes the LLM to answer from chat context instead of KG.
+            working="" if is_question else state.get("working_context", ""),
+            episodes=state.get("episode_context", ""),
+            kg=state.get("kg_context", ""),
             token_budget=settings.context_token_budget,
         )
         formatted = format_context_block(block)
@@ -247,7 +295,8 @@ def _compile_graph(working: WorkingMemoryAgent, episodic: EpisodicMemoryAgent, k
 
     def conversational_node(state: MemoryWeaveState) -> dict:
         t0 = time.perf_counter()
-        system = _BASE_SYSTEM
+        is_question = state.get("query_mode", "memory") == "question"
+        system = _QUESTION_SYSTEM if is_question else _BASE_SYSTEM
         if state.get("formatted_context"):
             system += f"\n\n{state['formatted_context']}"
         response = llm.invoke([

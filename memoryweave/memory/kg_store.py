@@ -49,11 +49,10 @@ class KnowledgeGraphStore:
         if not self._node_embeddings:
             return []
         q_vec = self._embed(query)
-        # dot product cosine (vectors are unit-normalised by bge-small)
+        mag_q = math.sqrt(sum(a * a for a in q_vec))
         scores: dict[str, float] = {}
         for name, vec in self._node_embeddings.items():
             dot = sum(a * b for a, b in zip(q_vec, vec))
-            mag_q = math.sqrt(sum(a * a for a in q_vec))
             mag_v = math.sqrt(sum(a * a for a in vec))
             scores[name] = dot / (mag_q * mag_v + 1e-9)
         ranked = sorted(scores, key=lambda k: scores[k], reverse=True)
@@ -108,7 +107,8 @@ class KnowledgeGraphStore:
 
         heap: list[tuple[float, int, int, str, str]] = []
         visited: set[str] = set(seed_names)
-        results: list[tuple[str, dict]] = []
+        # Seeds always included so their own descriptions appear in context
+        results: list[tuple[str, dict]] = [(s, dict(self._graph.nodes[s])) for s in seed_names]
         traversed_edges: list[tuple[str, str]] = []
         _ctr = 0
 
@@ -116,6 +116,11 @@ class KnowledgeGraphStore:
             for _, nbr, data in self._graph.out_edges(seed, data=True):
                 heapq.heappush(heap, (-data["weight"], _ctr, 0, seed, nbr))
                 _ctr += 1
+            # Bidirectional: in-edges surface nodes that point TO the seed
+            for src, _, data in self._graph.in_edges(seed, data=True):
+                if src not in visited:
+                    heapq.heappush(heap, (-data.get("weight", 1.0), _ctr, 0, seed, src))
+                    _ctr += 1
 
         while heap and len(results) < node_budget:
             neg_w, _, depth, parent, node = heapq.heappop(heap)
@@ -130,23 +135,102 @@ class KnowledgeGraphStore:
                     if nbr not in visited:
                         heapq.heappush(heap, (-data["weight"], _ctr, depth + 1, node, nbr))
                         _ctr += 1
+                for src, _, data in self._graph.in_edges(node, data=True):
+                    if src not in visited:
+                        heapq.heappush(heap, (-data.get("weight", 1.0), _ctr, depth + 1, node, src))
+                        _ctr += 1
 
         self._reinforce(traversed_edges)
         return results
 
     def format_context(self, nodes: list[tuple[str, dict]]) -> str:
+        """
+        SubgraphRAG-style linearized format: entity descriptions + clean relationship triples.
+        No raw weights or graph internals — safe to inject directly into the LLM prompt.
+        """
         if not nodes:
             return ""
-        lines = []
+
+        node_names = {name for name, _ in nodes}
+
+        # Section 1: entity descriptions in prose
+        entity_lines = []
         for name, attrs in nodes:
             t = attrs.get("type", "")
             d = attrs.get("description", "")
-            lines.append(f"[{name}] ({t}) — {d}")
-            for src, _, data in self._graph.in_edges(name, data=True):
-                lines.append(f"  ← {data['rel_type']} ← [{src}] (weight: {data['weight']:.2f})")
+            label = f"{name} ({t})" if t else name
+            entity_lines.append(f"- {label}: {d}" if d else f"- {label}")
+
+        # Section 2: relationships as (subject, predicate, object) triples.
+        # Include ALL edges from/to retrieved nodes, not just intra-subgraph ones,
+        # so cross-boundary relationships are never silently dropped.
+        seen: set[tuple[str, str]] = set()
+        triple_lines = []
+        for name, _ in nodes:
             for _, nbr, data in self._graph.out_edges(name, data=True):
-                lines.append(f"  → {data['rel_type']} → [{nbr}] (weight: {data['weight']:.2f})")
-        return "\n".join(lines)
+                if (name, nbr) not in seen:
+                    seen.add((name, nbr))
+                    rel = data.get("rel_type", "related_to").replace("_", " ")
+                    triple_lines.append(f"  ({name}, {rel}, {nbr})")
+            for src, _, data in self._graph.in_edges(name, data=True):
+                if (src, name) not in seen:
+                    seen.add((src, name))
+                    rel = data.get("rel_type", "related_to").replace("_", " ")
+                    triple_lines.append(f"  ({src}, {rel}, {name})")
+
+        parts = ["Entities:"] + entity_lines
+        if triple_lines:
+            parts += ["\nRelationships:"] + triple_lines
+        return "\n".join(parts)
+
+    def traverse_ppr(
+        self,
+        seed_names: list[str],
+        max_nodes: int = 12,
+        damping: float = 0.5,
+    ) -> list[tuple[str, dict]]:
+        """
+        Personalized PageRank traversal — HippoRAG (Gutierrez et al., 2024).
+        Explores all seed neighbourhoods jointly so multi-entity queries surface
+        connecting nodes that BFS misses. Hebbian edge weights drive transition probs.
+        Falls back to BFS for single-seed queries (PPR degenerates there).
+        """
+        seeds = [n for n in seed_names if self._graph.has_node(n)]
+        if not seeds:
+            return []
+        if len(seeds) == 1:
+            return self.traverse(seeds, max_hops=2, node_budget=max_nodes)
+
+        # IDF-style specificity: nodes with fewer edges get higher seed weight
+        # (HippoRAG insight: rare/specific nodes are better anchors)
+        raw_weights = {s: 1.0 / max(self._graph.degree(s), 1) for s in seeds}
+        total = sum(raw_weights.values())
+        personalization = {s: w / total for s, w in raw_weights.items()}
+
+        try:
+            scores = nx.pagerank(
+                self._graph,
+                alpha=damping,
+                personalization=personalization,
+                weight="weight",
+                max_iter=100,
+            )
+        except nx.PowerIterationFailedConvergence:
+            return self.traverse(seeds, max_hops=2, node_budget=max_nodes)
+
+        seed_set = set(seeds)
+        ranked = sorted(
+            [(n, s) for n, s in scores.items() if n not in seed_set],
+            key=lambda x: x[1],
+            reverse=True,
+        )[:max_nodes - len(seeds)]
+
+        result = [(s, dict(self._graph.nodes[s])) for s in seeds]
+        result += [(n, dict(self._graph.nodes[n])) for n, _ in ranked]
+
+        if ranked:
+            self._reinforce([(seeds[0], ranked[0][0])])
+        return result
 
     # ── Maintenance ───────────────────────────────────────────────────────────
 

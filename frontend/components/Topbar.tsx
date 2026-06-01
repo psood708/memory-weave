@@ -16,12 +16,13 @@ const PROVIDER_COLOR: Record<Provider, string> = {
 };
 
 export default function Topbar({
-  tab, onTab, provider, onProvider,
+  tab, onTab, provider, onProvider, chatModel,
 }: {
   tab: 'conversation' | 'evals' | 'docs';
   onTab: (t: 'conversation' | 'evals' | 'docs') => void;
   provider: Provider;
   onProvider: (p: Provider) => void;
+  chatModel?: string;
 }) {
   return (
     <div className="topbar">
@@ -62,7 +63,9 @@ export default function Topbar({
         <span className="kv">
           <span className="kv-k">provider</span>
           <span className="kv-v" style={{ color: PROVIDER_COLOR[provider] }}>
-            {PROVIDER_LABEL[provider]}
+            {provider === 'custom' && chatModel
+              ? chatModel.split('/').pop()
+              : PROVIDER_LABEL[provider]}
           </span>
         </span>
         <span className="live"><span className="live-dot" /> live</span>

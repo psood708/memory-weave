@@ -83,6 +83,7 @@ export default function App(props: { initialTab?: Tab }) {
   const [pruning, setPruning] = useState<string | null>(null);
   const [memQuery, setMemQuery] = useState('');
   const [provider, setProvider] = useState<Provider>('ollama');
+  const [chatModel, setChatModel] = useState('');
 
   // Session ID — persisted in sessionStorage
   const [sessionId] = useState(() => {
@@ -121,6 +122,20 @@ export default function App(props: { initialTab?: Tab }) {
     setToasts(ts => [...ts, { id, ...t }]);
     setTimeout(() => setToasts(ts => ts.map(x => x.id === id ? { ...x, exit: true } : x)), 3200);
     setTimeout(() => setToasts(ts => ts.filter(x => x.id !== id)), 3500);
+  }, []);
+
+  // Seed provider + chat model from saved user config on mount
+  useEffect(() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+    fetch(`${apiUrl}/api/user/model-config`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.configured) {
+          setProvider(data.provider as Provider);
+          setChatModel(data.chat_model ?? '');
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // Fetch initial memory state on mount or when provider changes
@@ -212,7 +227,7 @@ export default function App(props: { initialTab?: Tab }) {
 
   return (
     <div className="app" style={{ ['--left-w' as any]: leftW + 'px', ['--right-w' as any]: rightW + 'px' }}>
-      <Topbar tab={tab} onTab={setTab} provider={provider} onProvider={(p: Provider) => setProvider(p)} />
+      <Topbar tab={tab} onTab={setTab} provider={provider} onProvider={(p: Provider) => setProvider(p)} chatModel={chatModel} />
       {tab === 'conversation' ? (
         <div className="main conv-main">
           {leftCollapsed ? (
@@ -264,6 +279,7 @@ export default function App(props: { initialTab?: Tab }) {
             provider={provider}
             memoryState={memoryState}
             onMemoryUpdate={setMemoryState}
+            onToast={pushToast}
           />
           {rightCollapsed ? (
             <button

@@ -109,6 +109,41 @@ class PostgresMetricsRepository(MetricsRepository):
         ]
 
 
+    async def list_retrieval_evals(self, session_id: str, limit: int = 50) -> list[dict]:
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT turn_number, kg_seed_found, episode_count, kg_node_count,
+                       context_relevance, faithfulness, answer_relevance, reasoning, timestamp
+                FROM retrieval_evals WHERE session_id=$1
+                ORDER BY turn_number DESC LIMIT $2
+                """,
+                session_id, limit,
+            )
+        return [dict(r) for r in rows]
+
+    async def get_retrieval_summary(self, session_id: str) -> dict:
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT
+                    COUNT(*)                                                             AS total,
+                    AVG(context_relevance)                                               AS avg_context_relevance,
+                    AVG(faithfulness)                                                    AS avg_faithfulness,
+                    AVG(answer_relevance)                                                AS avg_answer_relevance,
+                    SUM(CASE WHEN kg_seed_found THEN 1 ELSE 0 END)::float
+                        / NULLIF(COUNT(*), 0)                                           AS kg_seed_hit_rate,
+                    AVG(episode_count)                                                   AS avg_episode_count,
+                    AVG(kg_node_count)                                                   AS avg_kg_node_count
+                FROM retrieval_evals WHERE session_id = $1
+                """,
+                session_id,
+            )
+        if not row or row["total"] == 0:
+            return {}
+        return {k: (float(v) if v is not None else None) for k, v in dict(row).items()}
+
+
 def _row_to_turn(row: asyncpg.Record) -> TurnMetrics:
     breakdown = json.loads(row["judge_metric_breakdown"]) if row["judge_metric_breakdown"] else {}
     ts = row["timestamp"]

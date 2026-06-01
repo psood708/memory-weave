@@ -36,5 +36,7 @@ data/
 
 # Personal — scratch files, notes, interview prep (yours only, never commits)
 PERSONAL.md
+PROJECT_STATUS.md
+scripts/
 scratch/
 notes/

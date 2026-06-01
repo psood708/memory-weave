@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv(override=False)  # override=False: real env vars (prod/Docker/CI) take precedence over .env
+
 import os
 import uvicorn
 

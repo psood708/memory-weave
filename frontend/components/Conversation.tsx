@@ -8,6 +8,7 @@ import type {
   AgentStep, Budget, ChatMessage, ContextSnapshot, MessageMeta, RichSegment,
 } from '@/lib/data';
 import type { MemoryState, Provider } from '@/lib/api';
+import type { ToastItem } from './Toasts';
 
 /* ------------------------------------------------------------------ */
 /* Inline thinking trace — replaces the always-visible top stepper.    */
@@ -228,12 +229,48 @@ function isQuestion(text: string): boolean {
   return t.endsWith('?') || QUESTION_RE.test(t);
 }
 
-function Composer({ budget, onSend }: { budget: Budget; onSend?: (text: string, mode: ComposerMode) => void }) {
+function Composer({
+  budget, onSend, sessionId, provider, onToast,
+}: {
+  budget: Budget;
+  onSend?: (text: string, mode: ComposerMode) => void;
+  sessionId: string;
+  provider: Provider;
+  onToast?: (t: Omit<ToastItem, 'id'>) => void;
+}) {
   const [showBudget, setShowBudget] = useState(false);
   const [text, setText] = useState('');
   const [mode, setMode] = useState<ComposerMode>('memory');
   const [modeError, setModeError] = useState('');
+  const [uploading, setUploading] = useState(false);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setUploading(true);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+      const form = new FormData();
+      form.append('file', file);
+      form.append('session_id', sessionId);
+      form.append('provider', provider);
+      const res = await fetch(`${apiUrl}/api/files/upload`, { method: 'POST', credentials: 'include', body: form });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        onToast?.({ tier: 'episodic', text: `Upload failed: ${err.detail ?? res.statusText}` });
+        return;
+      }
+      const data = await res.json();
+      onToast?.({ tier: 'episodic', text: `✦ ${file.name} indexed · ${data.chunk_count} chunks · ${data.kg_nodes} nodes` });
+    } catch {
+      onToast?.({ tier: 'episodic', text: 'Upload failed — network error' });
+    } finally {
+      setUploading(false);
+    }
+  };
   const pct = Math.round((budget.used / budget.total) * 100);
 
   const autosize = (el: HTMLTextAreaElement | null) => {
@@ -322,8 +359,22 @@ function Composer({ budget, onSend }: { budget: Budget; onSend?: (text: string, 
             onKeyDown={onKeyDown}
             placeholder={placeholder}
           />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.txt,.md,.py,.js,.ts,.json,.yaml,.yml,.toml"
+            style={{ display: 'none' }}
+            onChange={handleFileChange}
+          />
           <div className="composer-tools">
-            <button className="icon-btn" data-tooltip="Attach file"><Icon name="clip" size={14} /></button>
+            <button
+              className={`icon-btn${uploading ? ' icon-btn--loading' : ''}`}
+              data-tooltip={uploading ? 'Uploading…' : 'Attach file'}
+              onClick={() => !uploading && fileInputRef.current?.click()}
+              disabled={uploading}
+            >
+              <Icon name="clip" size={14} />
+            </button>
             <div className="budget-pill-wrap">
               <button className={`budget-pill ${showBudget ? 'open' : ''}`} onClick={() => setShowBudget(o => !o)} data-tooltip="Context budget">
                 <span className="bp-dot" />
@@ -359,12 +410,13 @@ export interface ConversationProps {
   provider: Provider;
   memoryState: MemoryState | null;
   onMemoryUpdate: (s: MemoryState) => void;
+  onToast?: (t: Omit<ToastItem, 'id'>) => void;
 }
 
 export default function Conversation({
   conv, agentSteps, agentActive, streamedChars, expandedCtx,
   onToggleCtx, onEpisode, onEntity, onSend, onConvClear, budget,
-  sessionId, provider, memoryState, onMemoryUpdate,
+  sessionId, provider, memoryState, onMemoryUpdate, onToast,
 }: ConversationProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -414,7 +466,7 @@ export default function Conversation({
           ))}
         </div>
       </div>
-      <Composer budget={budget} onSend={onSend} />
+      <Composer budget={budget} onSend={onSend} sessionId={sessionId} provider={provider} onToast={onToast} />
     </div>
   );
 }

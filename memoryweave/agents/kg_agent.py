@@ -9,6 +9,16 @@ from memoryweave.core.llm import extract_text, get_extraction_llm
 from memoryweave.memory.kg_store import KnowledgeGraphStore
 
 
+_QUERY_NER_PROMPT = """\
+Extract named entities from this question that might exist in a personal memory system.
+Look for: people, companies, projects, tools, events, skills, preferences.
+
+Question: {query}
+
+Return ONLY a JSON list of strings: ["entity1", "entity2"]
+If nothing found, return: []"""
+
+
 def _parse_llm_json(raw: str) -> dict:
     """Strip Qwen3 <think> blocks and extract the JSON object from LLM output."""
     text = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL).strip()
@@ -46,6 +56,16 @@ entity/relationship rules:
 
 Return ONLY the JSON object."""
 
+
+_STOPWORDS: frozenset[str] = frozenset({
+    "what", "does", "this", "that", "they", "them", "from", "with", "when",
+    "where", "which", "have", "been", "will", "were", "their", "some", "tell",
+    "know", "about", "like", "work", "used", "more", "than", "also", "just",
+    "your", "make", "much", "most", "into", "then", "here", "there", "give",
+    "show", "find", "help", "said", "each", "time", "very", "many", "name",
+    "such", "only", "even", "those", "other", "same", "using", "list", "kind",
+    "type", "sort", "thing", "things", "something", "anything", "nothing",
+})
 
 _TYPE_COERCE: dict[str, str] = {
     "Technology": "Fact",
@@ -125,16 +145,61 @@ class KGAgent:
             return FusedResult(importance_score=0.0, entities=[], relationships=[])
 
     def find_seed_nodes(self, text: str) -> list[str]:
-        """Exact name match first; semantic embedding fallback for vague queries."""
+        """
+        Three-tier seed finding (ToG + HippoRAG):
+        1. Exact substring match — zero cost, catches direct name mentions
+        2. LLM NER extraction — catches partial names and concept mentions
+        3. Semantic embedding fallback — catches vague/thematic queries
+        """
+        graph_nodes = list(self._store._graph.nodes)
         text_lower = text.lower()
-        exact = [n for n in self._store._graph.nodes if n.lower() in text_lower]
+
+        # Tier 1a: exact match — full node name is substring of query
+        exact = [n for n in graph_nodes if n.lower() in text_lower]
         if exact:
             return exact
+
+        # Tier 1b: token match — significant query words (≥4 chars, non-stopword) in node names
+        query_words = {w for w in re.findall(r'\b[a-z]{4,}\b', text_lower) if w not in _STOPWORDS}
+        token_hits = [n for n in graph_nodes if any(w in n.lower() for w in query_words)]
+        if token_hits:
+            return token_hits
+
+        # Tier 2: LLM-extracted entities → match against graph
+        try:
+            raw = self._extraction_llm.invoke(
+                [HumanMessage(content=_QUERY_NER_PROMPT.format(query=text))]
+            )
+            clean = re.sub(r'<think>.*?</think>', '', extract_text(raw.content), flags=re.DOTALL)
+            arr_match = re.search(r'\[.*?\]', clean, re.DOTALL)
+            if arr_match:
+                ner_entities: list[str] = json.loads(arr_match.group(0))
+                matched: list[str] = []
+                for entity in ner_entities:
+                    e_lower = entity.lower()
+                    # full match first, then partial
+                    direct = [n for n in graph_nodes if n.lower() == e_lower]
+                    partial = [n for n in graph_nodes
+                               if e_lower in n.lower() or n.lower() in e_lower]
+                    matched.extend(direct or partial[:2])
+                deduped = list(dict.fromkeys(matched))
+                if deduped:
+                    return deduped
+        except Exception:
+            pass
+
+        # Tier 3: semantic embedding fallback
         return self._store.semantic_seed_search(text, top_k=4, threshold=0.25)
 
     def retrieve_context(self, entity_ids: list[str]) -> str:
-        """Read path: traverse graph from entity_ids, return formatted context string."""
-        nodes = self._store.traverse(entity_ids, max_hops=settings.kg_traversal_hops)
+        """
+        Read path: PPR traversal for multi-seed queries (HippoRAG),
+        BFS for single-seed. Returns SubgraphRAG-style formatted context.
+        """
+        if len(entity_ids) >= 2:
+            nodes = self._store.traverse_ppr(entity_ids, max_nodes=12)
+        else:
+            nodes = self._store.traverse(entity_ids, max_hops=settings.kg_traversal_hops)
         self._store._maybe_maintain()
         return self._store.format_context(nodes)
 

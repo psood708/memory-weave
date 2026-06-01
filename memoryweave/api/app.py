@@ -1,8 +1,11 @@
 import asyncio
 import json
+import logging
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 import asyncpg
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -23,6 +26,7 @@ from memoryweave.eval.judges.heuristic_judge import HeuristicJudge
 from memoryweave.eval.judges.ragas_judge import RagasJudge
 from memoryweave.eval.repository.postgres_repo import PostgresMetricsRepository
 from memoryweave.eval.workers.judge import LLMJudgeWorker
+from memoryweave.eval.workers.retrieval_eval import RetrievalEvalWorker
 from memoryweave.eval.workers.token_metrics import TokenMetricsWorker
 from memoryweave.eval.workers.forgetting import ForgettingTracker
 
@@ -40,6 +44,7 @@ from memoryweave.api.models import (
     WorkingTurn,
 )
 from memoryweave.api.session import SessionState, clear_sessions, get_or_create_session
+from memoryweave.api.file_routes import router as file_router
 from memoryweave.api.model_routes import router as model_router
 from memoryweave.core.config import settings
 from memoryweave.core.llm import extract_text
@@ -49,14 +54,19 @@ from memoryweave.core.llm import extract_text
 
 eval_bus = EvalEventBus()
 forgetting_tracker = ForgettingTracker()
-judge_worker: LLMJudgeWorker = None  # initialized in lifespan
+judge_worker: LLMJudgeWorker = None          # initialized in lifespan
+retrieval_eval_worker: RetrievalEvalWorker = None  # initialized in lifespan
 
 
 # ── Lifespan context manager ──────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global judge_worker
+    global judge_worker, retrieval_eval_worker
+    if "*" in settings.cors_origins:
+        raise RuntimeError(
+            "CORS_ORIGINS must not contain '*' — set it to the explicit frontend origin(s) in your environment."
+        )
     await init_pool()
     await init_redis()
     await init_db()
@@ -64,6 +74,7 @@ async def lifespan(app: FastAPI):
     pool = get_pool()
     repo = PostgresMetricsRepository(pool)
     token_worker = TokenMetricsWorker(repo)
+    retrieval_eval_worker = RetrievalEvalWorker(pool)
 
     backend = settings.eval_judge_backend
     judge = RagasJudge() if backend == "ragas" else HeuristicJudge()
@@ -75,15 +86,22 @@ async def lifespan(app: FastAPI):
 
     async def _eval_consumer():
         while True:
-            event = await eval_bus.get()
-            turn_id = await token_worker.process(event)
-            if turn_id:
-                event.turn_metric_id = turn_id
-                await judge_worker.process(
-                    turn_id, event.question,
-                    event.episode_texts + event.kg_texts,
-                    event.answer,
-                )
+            try:
+                event = await eval_bus.get()
+                turn_id = await token_worker.process(event)
+                if turn_id:
+                    event.turn_metric_id = turn_id
+                    await retrieval_eval_worker.process(turn_id, event)
+                    if not event.is_question_mode:
+                        await judge_worker.process(
+                            turn_id, event.question,
+                            event.episode_texts + event.kg_texts,
+                            event.answer,
+                        )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("_eval_consumer: error processing event, continuing")
 
     consumer_task = asyncio.create_task(_eval_consumer())
     try:
@@ -106,6 +124,7 @@ app.add_middleware(
 
 app.include_router(model_router)
 app.include_router(eval_router)
+app.include_router(file_router)
 
 
 # ── Request models ────────────────────────────────────────────────────────────
@@ -139,7 +158,19 @@ async def chat_stream(
         t_start = time.perf_counter()
 
         invoke_task = asyncio.create_task(
-            asyncio.to_thread(session.graph.invoke, {"user_input": req.message})
+            asyncio.to_thread(
+                session.graph.invoke,
+                {"user_input": req.message, "query_mode": req.mode},
+                {
+                    "run_name": "memoryweave_turn",
+                    "tags": [req.mode, req.provider],
+                    "metadata": {
+                        "session_id": req.session_id,
+                        "user_id": user_session.user_id,
+                        "turn": session.turn_count,
+                    },
+                },
+            )
         )
 
         for step in ("ep", "kg", "mrg"):
@@ -206,12 +237,39 @@ async def chat_stream(
         )
         yield _sse("done", done_payload.model_dump())
 
-        if req.mode != "question":
-            await session.write_turn_async(
-                req.message,
-                response_text,
-                total_latency_ms=int(latency * 1000),
-                kg_context=kg_context,
+        ep_texts = [ep.content for ep in (retrieved_episodes or [])]
+        kg_texts = [ln.strip() for ln in kg_context.splitlines() if ln.strip()]
+
+        if req.mode == "question":
+            try:
+                from memoryweave.eval.events import TurnEvent
+                eval_bus.emit(TurnEvent(
+                    session_id=req.session_id,
+                    user_id=user_session.user_id,
+                    turn_number=session.turn_count,
+                    question=req.message,
+                    answer=response_text,
+                    episode_texts=ep_texts,
+                    kg_texts=kg_texts,
+                    episode_embeddings=[],
+                    kg_embedding=[],
+                    system_tokens=token_estimate,
+                    naive_tokens=token_estimate,
+                    retrieval_latency_ms=0,
+                    total_latency_ms=int(latency * 1000),
+                    is_question_mode=True,
+                ))
+            except Exception:
+                logger.exception("eval_bus emit failed for question mode turn %d", session.turn_count)
+        else:
+            asyncio.create_task(
+                session.write_turn_async(
+                    req.message,
+                    response_text,
+                    total_latency_ms=int(latency * 1000),
+                    kg_context=kg_context,
+                    retrieved_episode_texts=ep_texts,
+                )
             )
             yield _sse("memory_updated", {})
 
@@ -247,6 +305,9 @@ async def get_memory(
     db: asyncpg.Connection = Depends(get_db),
 ):
     user_config = await ModelConfigRepo(db).load(user_session.user_id)
+    row = await db.fetchrow("SELECT user_id FROM sessions WHERE id = $1", session_id)
+    if row is not None and row["user_id"] is not None and row["user_id"] != user_session.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this session")
     session: SessionState = await get_or_create_session(session_id, provider, user_config=user_config)
 
     working_turns: list[WorkingTurn] = []
@@ -358,8 +419,9 @@ async def clear_memory(
 ):
     """Wipe stored memory for a session. Only the session owner can clear."""
     row = await db.fetchrow("SELECT user_id FROM sessions WHERE id = $1", req.session_id)
-    if row and row["user_id"] and row["user_id"] != user_session.user_id:
-        raise HTTPException(status_code=403, detail="Not authorized to clear this session")
+    if row is not None:
+        if row["user_id"] is None or row["user_id"] != user_session.user_id:
+            raise HTTPException(status_code=403, detail="Not authorized to clear this session")
 
     user_config = await ModelConfigRepo(db).load(user_session.user_id)
     session: SessionState = await get_or_create_session(req.session_id, req.provider, user_config=user_config)
