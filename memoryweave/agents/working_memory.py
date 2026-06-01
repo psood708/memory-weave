@@ -1,6 +1,6 @@
 from collections import deque
 
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 from memoryweave.core.config import settings
 
@@ -28,6 +28,16 @@ class WorkingMemoryAgent:
             role = "User" if msg.type == "human" else "Assistant"
             lines.append(f"{role}: {msg.content}")
         return "\n".join(lines)
+
+    def to_json(self) -> list[dict]:
+        return [{"type": msg.type, "content": msg.content} for msg in self._buffer]
+
+    def load_buffer(self, data: list[dict]) -> None:
+        """Restore buffer from serialized data (e.g. loaded from Redis)."""
+        for item in data:
+            msg = HumanMessage(content=item["content"]) if item["type"] == "human" else AIMessage(content=item["content"])
+            self._buffer.append(msg)
+            self._total_added += 1
 
     def clear(self) -> None:
         self._buffer.clear()

@@ -1,4 +1,5 @@
 import asyncio
+import json as _json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -47,6 +48,16 @@ class SessionState:
         msgs = [HumanMessage(content=user_input), AIMessage(content=response)]
         for msg in msgs:
             self.working.add(msg)
+
+        from memoryweave.db.redis_client import get_redis
+        r = get_redis()
+        if r is not None:
+            await r.setex(
+                f"working_mem:{self.session_id}:{self.user_id}",
+                _SESSION_TTL,
+                _json.dumps(self.working.to_json()),
+            )
+
         turn_content = f"{user_input}\n{response}"
         fused = await asyncio.to_thread(self.kg.fused_extract, turn_content)
         episode = self.episodic.write(msgs, importance_score=fused.importance_score)
@@ -103,7 +114,6 @@ async def get_or_create_session(
     """Return existing session or build a new one, loading KG from PostgreSQL.
     Writes session metadata to Redis (if configured) for cross-instance awareness."""
     from memoryweave.db.redis_client import get_redis
-    import json as _json
 
     user_id = user_config.user_id if user_config else ""
     key = f"{session_id}:{user_id}"
@@ -122,14 +132,17 @@ async def get_or_create_session(
             kg=bundle.kg,
         )
         state.user_id = user_id
-        _sessions[key] = state
         r = get_redis()
         if r is not None:
+            raw = await r.get(f"working_mem:{key}")
+            if raw:
+                state.working.load_buffer(_json.loads(raw))
             await r.setex(
                 redis_key,
                 _SESSION_TTL,
                 _json.dumps({"provider": provider, "user_id": user_id}),
             )
+        _sessions[key] = state
     else:
         session = _sessions[key]
         if session.provider != provider:
