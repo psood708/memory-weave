@@ -8,7 +8,7 @@ type Catalog = { chat: CatalogEntry[]; embedding: CatalogEntry[]; judge: Catalog
 export default function ModelSetupModal() {
   const router = useRouter();
   const [catalog, setCatalog] = useState<Catalog | null>(null);
-  const [provider, setProvider] = useState<"ollama" | "huggingface">("huggingface");
+  const [provider, setProvider] = useState<"ollama" | "huggingface" | "custom">("huggingface");
   const [hfKey, setHfKey] = useState("");
   const [chatModel, setChatModel] = useState("");
   const [embeddingModel, setEmbeddingModel] = useState("");
@@ -41,7 +41,7 @@ export default function ModelSetupModal() {
         chat_model: chatModel || null,
         embedding_model: embeddingModel || null,
         judge_model: judgeModel || null,
-        hf_api_key: provider === "huggingface" ? hfKey : null,
+        hf_api_key: provider !== "ollama" ? hfKey : null,
       }),
     });
     setSaving(false);
@@ -73,25 +73,25 @@ export default function ModelSetupModal() {
       </div>
 
       <div className="flex gap-2">
-        {(["huggingface", "ollama"] as const).map((p) => (
+        {(["huggingface", "custom", "ollama"] as const).map((p) => (
           <button
             key={p}
             onClick={() => setProvider(p)}
             className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${provider === p ? "bg-indigo-600 text-white" : "bg-gray-800 text-gray-300 hover:bg-gray-700"}`}
           >
-            {p === "huggingface" ? "HuggingFace" : "Local (Ollama)"}
+            {p === "huggingface" ? "HuggingFace" : p === "custom" ? "Custom Key" : "Local (Ollama)"}
           </button>
         ))}
       </div>
 
-      {provider === "huggingface" && (
+      {provider !== "ollama" && (
         <div className="flex flex-col gap-1">
           <label className="text-gray-300 text-sm font-medium">HuggingFace API Key</label>
           <input
             type="password"
             placeholder="hf_..."
             value={hfKey}
-            onChange={(e) => setHfKey(e.target.value)}
+            onChange={(e) => { setHfKey(e.target.value); if (e.target.value) setProvider("custom"); }}
             className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500"
           />
         </div>
