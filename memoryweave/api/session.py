@@ -52,10 +52,11 @@ class SessionState:
         from memoryweave.db.redis_client import get_redis
         r = get_redis()
         if r is not None:
+            payload = {"messages": self.working.to_json(), "turn_count": self.turn_count}
             await r.setex(
                 f"working_mem:{self.session_id}:{self.user_id}",
                 _SESSION_TTL,
-                _json.dumps(self.working.to_json()),
+                _json.dumps(payload),
             )
 
         turn_content = f"{user_input}\n{response}"
@@ -92,6 +93,23 @@ class SessionState:
             eval_bus.emit(event)
         except Exception:
             _logger.exception("eval_bus emit failed — metrics skipped for turn %d", self.turn_count)
+
+
+def _restore_working_mem(state: SessionState, raw: str) -> None:
+    """Load working memory snapshot from a Redis JSON string into state.
+
+    Accepts both the legacy list format (messages only) and the current dict
+    format {messages: [...], turn_count: N} so old snapshots aren't dropped.
+    """
+    data = _json.loads(raw)
+    if isinstance(data, list):
+        messages, turn_count = data, None
+    else:
+        messages, turn_count = data.get("messages", []), data.get("turn_count")
+    state.working.clear()
+    state.working.load_buffer(messages)
+    if turn_count is not None:
+        state.turn_count = turn_count
 
 
 # In-memory session registry: "{session_id}:{user_id}" -> SessionState
@@ -136,7 +154,7 @@ async def get_or_create_session(
         if r is not None:
             raw = await r.get(f"working_mem:{key}")
             if raw:
-                state.working.load_buffer(_json.loads(raw))
+                _restore_working_mem(state, raw)
             await r.setex(
                 redis_key,
                 _SESSION_TTL,
@@ -150,5 +168,9 @@ async def get_or_create_session(
         r = get_redis()
         if r is not None:
             await r.expire(redis_key, _SESSION_TTL)
+            # Resync working memory in case another replica wrote a newer snapshot
+            raw = await r.get(f"working_mem:{key}")
+            if raw:
+                _restore_working_mem(session, raw)
 
     return _sessions[key]

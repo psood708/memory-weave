@@ -44,6 +44,7 @@ from memoryweave.api.models import (
     WorkingTurn,
 )
 from memoryweave.api.session import SessionState, clear_sessions, get_or_create_session
+from memoryweave.api.file_routes import router as file_router
 from memoryweave.api.model_routes import router as model_router
 from memoryweave.core.config import settings
 from memoryweave.core.llm import extract_text
@@ -123,6 +124,7 @@ app.add_middleware(
 
 app.include_router(model_router)
 app.include_router(eval_router)
+app.include_router(file_router)
 
 
 # ── Request models ────────────────────────────────────────────────────────────

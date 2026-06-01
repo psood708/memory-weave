@@ -44,6 +44,23 @@ class EpisodicMemoryAgent:
         self._store._maybe_decay(settings.episodic_decay_lambda)
         return [ep for ep in episodes if ep.importance_score >= settings.episodic_min_importance]
 
+    def write_document_chunk(self, content: str, importance_score: float) -> Episode | None:
+        """Write a document chunk (non-conversational) as an episode."""
+        turn = self._store.increment_turn()
+        if importance_score < settings.episodic_importance_threshold:
+            return None
+        episode = Episode(
+            id=EpisodicStore.new_id(),
+            content=content,
+            importance_score=importance_score,
+            timestamp=datetime.now(timezone.utc),
+            session_id=self._session_id,
+            turn_number=turn,
+            entity_ids=[],
+        )
+        self._store.write(episode)
+        return episode
+
     def update_entity_links(self, episode_id: str, entity_ids: list[str]) -> None:
         self._store.update_entity_links(episode_id, entity_ids)
 

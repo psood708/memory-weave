@@ -229,7 +229,7 @@ async def seed_kg(demo_session_id: str, provider: str, user_id: str = "") -> Non
     print(f"  KG path  : {kg_path}")
     print()
 
-    bundle = build_read_graph_with_state(session_id=demo_session_id, provider=provider, user_config=user_config)
+    bundle = await build_read_graph_with_state(session_id=demo_session_id, provider=provider, user_config=user_config)
     session = SessionState(
         session_id=demo_session_id,
         provider=provider,
