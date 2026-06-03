@@ -23,7 +23,12 @@ def _parse_llm_json(raw: str) -> dict:
     """Strip Qwen3 <think> blocks and extract the JSON object from LLM output."""
     text = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL).strip()
     match = re.search(r'\{.*\}', text, re.DOTALL)
-    return json.loads(match.group(0) if match else text)
+    candidate = match.group(0) if match else text
+    try:
+        return json.loads(candidate)
+    except json.JSONDecodeError:
+        from json_repair import repair_json
+        return json.loads(repair_json(candidate))
 
 
 _FUSED_PROMPT = """\

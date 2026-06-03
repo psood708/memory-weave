@@ -18,8 +18,8 @@ const PROVIDER_COLOR: Record<Provider, string> = {
 export default function Topbar({
   tab, onTab, provider, onProvider, chatModel,
 }: {
-  tab: 'conversation' | 'evals' | 'docs';
-  onTab: (t: 'conversation' | 'evals' | 'docs') => void;
+  tab: 'conversation' | 'evals' | 'docs' | 'files';
+  onTab: (t: 'conversation' | 'evals' | 'docs' | 'files') => void;
   provider: Provider;
   onProvider: (p: Provider) => void;
   chatModel?: string;
@@ -34,6 +34,7 @@ export default function Topbar({
       <div className="tabs">
         <button className={`tab ${tab === 'conversation' ? 'active' : ''}`} onClick={() => onTab('conversation')}>Conversation</button>
         <button className={`tab ${tab === 'evals' ? 'active' : ''}`} onClick={() => onTab('evals')}>Evals</button>
+        <button className={`tab ${tab === 'files' ? 'active' : ''}`} onClick={() => onTab('files')}>Files</button>
         <button className={`tab ${tab === 'docs' ? 'active' : ''}`} onClick={() => onTab('docs')}>Docs</button>
       </div>
       <div className="session">

@@ -6,6 +6,7 @@ import Conversation from './Conversation';
 import GraphPanel from './GraphPanel';
 import EvalDashboard from './EvalDashboard';
 import Docs from './Docs';
+import Files from './Files';
 import Toasts, { type ToastItem } from './Toasts';
 import { EpisodeInspector, EntityInspector } from './Inspector';
 import { Icon } from './Icon';
@@ -16,7 +17,7 @@ import {
 import { fetchMemoryState, resetSessions, streamChat } from '@/lib/api';
 import type { MemoryState, Provider } from '@/lib/api';
 
-type Tab = 'conversation' | 'evals' | 'docs';
+type Tab = 'conversation' | 'evals' | 'docs' | 'files';
 type Drawer =
   | { kind: 'episode'; data: Episode }
   | { kind: 'entity';  data: Entity }
@@ -309,6 +310,10 @@ export default function App(props: { initialTab?: Tab }) {
       ) : tab === 'evals' ? (
         <div className="evals-main">
           <EvalDashboard sessionId={sessionId} memoryState={memoryState} />
+        </div>
+      ) : tab === 'files' ? (
+        <div className="evals-main">
+          <Files sessionId={sessionId} provider={provider} onToast={pushToast} />
         </div>
       ) : (
         <div className="evals-main">

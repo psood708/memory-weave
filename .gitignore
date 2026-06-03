@@ -4,7 +4,6 @@ __pycache__/
 build/
 dist/
 wheels/
-docs/
 *.egg-info
 
 # Virtual environments
@@ -28,15 +27,26 @@ frontend/tsconfig.tsbuildinfo
 /.env.development
 /.env.production
 
-# Runtime state — env-namespaced data dirs replace these
+# Runtime state
 .chroma/
 .claude
 kg_store.json
 data/
 
-# Personal — scratch files, notes, interview prep (yours only, never commits)
+# Claude Code internal tool state
+.superpowers/
+
+# Internal planning docs (workflow artifacts — not needed to understand or run the app)
+docs/superpowers/
+
+# Deployment platform-specific
+cloudbuild.yaml
+
+# One-off debug scripts
+test_event.py
+
+# Personal — scratch files and notes
 PERSONAL.md
 PROJECT_STATUS.md
-scripts/
 scratch/
 notes/
