@@ -79,6 +79,27 @@ async def upload_file(
     return {"doc_id": doc_id, "chunk_count": len(chunks), "kg_nodes": kg_node_count}
 
 
+@router.delete("/files/{doc_id}")
+async def delete_file(
+    doc_id: str,
+    session: UserSession = Depends(verify_session),
+    db: asyncpg.Connection = Depends(get_db),
+):
+    row = await db.fetchrow(
+        "SELECT user_id FROM user_documents WHERE id=$1 AND deleted_at IS NULL",
+        doc_id,
+    )
+    if not row:
+        raise HTTPException(404, detail="File not found")
+    if str(row["user_id"]) != session.user_id:
+        raise HTTPException(403)
+    await db.execute(
+        "UPDATE user_documents SET deleted_at=NOW() WHERE id=$1",
+        doc_id,
+    )
+    return {"ok": True}
+
+
 @router.get("/files")
 async def list_files(
     session: UserSession = Depends(verify_session),
