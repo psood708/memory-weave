@@ -76,6 +76,20 @@ class QdrantEpisodicBackend:
             from qdrant_client import QdrantClient
             self._client = QdrantClient(path=".qdrant")
         self._session_id = session_id
+        self._ensure_payload_index()
+
+    def _ensure_payload_index(self) -> None:
+        # Qdrant Cloud strict mode blocks filtering on unindexed fields.
+        # A keyword index on session_id is required for per-session isolation to work.
+        from qdrant_client.models import PayloadSchemaType
+        try:
+            self._client.create_payload_index(
+                collection_name=self._COLLECTION,
+                field_name="session_id",
+                field_schema=PayloadSchemaType.KEYWORD,
+            )
+        except Exception:
+            pass  # index already exists — not an error
 
     def _filter(self):
         from qdrant_client.models import FieldCondition, Filter, MatchValue

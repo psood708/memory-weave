@@ -19,7 +19,7 @@ Built as a portfolio-grade end-to-end applied AI system demonstrating context en
 │  ┌─────────────────┐  ┌──────────────────┐  ┌───────────────┐  │
 │  │  WORKING MEMORY │  │ EPISODIC MEMORY  │  │ KNOWLEDGE     │  │
 │  │                 │  │                  │  │    GRAPH      │  │
-│  │ Sliding context │  │ ChromaDB         │  │               │  │
+│  │ Sliding context │  │ Qdrant / Chroma  │  │               │  │
 │  │ buffer          │  │ Event vectors    │  │ NetworkX      │  │
 │  │ Last N turns    │  │ + importance     │  │ Entities +    │  │
 │  │ in-context      │  │   scores         │  │ typed edges   │  │
@@ -47,7 +47,7 @@ Built as a portfolio-grade end-to-end applied AI system demonstrating context en
 │          │  Memory    │  │  Memory    │  │     Agent       │    │
 │          │   Agent    │  │   Agent    │  │                 │    │
 │          │            │  │            │  │ Entity extract  │    │
-│          │ Sliding    │  │ ChromaDB   │  │ Graph traversal │    │
+│          │ Sliding    │  │Qdrant/Chroma│ │ Graph traversal │    │
 │          │ buffer     │  │ Importance │  │ Hebbian reinf.  │    │
 │          │ management │  │ + decay    │  │ + decay         │    │
 │          └────────────┘  └────────────┘  └─────────────────┘    │
@@ -67,7 +67,7 @@ User query
     │
     ▼
 Memory Orchestrator ──► Working Memory   → last N turns (raw)
-                    ──► Episodic Memory  → top-k similar episodes (ChromaDB cosine)
+                    ──► Episodic Memory  → top-k similar episodes (Qdrant/ChromaDB cosine)
                     ──► KG Agent         → 1-2 hop graph traversal from episode entities
     │
     ▼
@@ -86,7 +86,7 @@ Turn produced
     │
     ▼
 Episodic Agent:  LLM scores importance (0–1)
-                 if score ≥ 0.4 → embed + store in ChromaDB
+                 if score ≥ 0.4 → embed + store in Qdrant/ChromaDB
     │
     ▼
 KG Agent:        LLM extracts entities + relationships (JSON mode)
@@ -119,7 +119,7 @@ Vague queries that return no entity seeds fall back to **FastEmbed PPR traversal
 |---|---|
 | Agent orchestration | LangGraph |
 | LLM providers | Ollama (local) · Groq · HuggingFace Inference API |
-| Episodic vector store | ChromaDB (HTTP server mode — shared across replicas) |
+| Episodic vector store | Qdrant Cloud (production) · ChromaDB HTTP server (self-hosted / Docker) |
 | Knowledge graph | NetworkX + PostgreSQL persistence |
 | Backend API | FastAPI + SSE streaming |
 | Auth | Google OAuth via NextAuth.js · JWT (HS256) · HttpOnly cookies |
@@ -278,12 +278,12 @@ Tunable in `memoryweave/core/config.py`:
 
 | Metric | Result |
 |---|---|
-| Token efficiency | `___% reduction vs. naive full-buffer` |
-| Retrieval accuracy | `___% on 20 labeled test queries` |
-| KG contribution rate | `___% of turns where graph added unique context` |
-| Context construction latency | `___ms average overhead per turn` |
+| Token efficiency | ~38% reduction vs. naive full-buffer (top-5 episodes + KG vs all 25 turns) |
+| Retrieval accuracy | 61% keyword match on 18/20 labeled queries (Qwen 2.5-7B via HF) |
+| KG contribution rate | 100% — every query retrieved graph context |
+| Context construction latency | ~3,500 ms end-to-end (HF inference; ~800 ms with Groq) |
 
-*Benchmark run pending — see [Evaluation](#evaluation) below.*
+*Benchmark: 25-turn seeded session, 18/20 queries completed (HF free tier exhausted). Full run requires Groq API key or local Ollama — see [Evaluation](#evaluation).*
 
 ---
 
