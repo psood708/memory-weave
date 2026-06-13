@@ -6,14 +6,13 @@ from datetime import datetime, timezone
 
 from langchain_core.messages import AIMessage, HumanMessage
 
-from memoryweave.core.config import settings
-
-_logger = logging.getLogger(__name__)
-
 from memoryweave.agents.episodic_memory import EpisodicMemoryAgent
 from memoryweave.agents.graph import GraphWithAgents, build_read_graph_with_state
 from memoryweave.agents.kg_agent import KGAgent
 from memoryweave.agents.working_memory import WorkingMemoryAgent
+from memoryweave.core.config import settings
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass
