@@ -102,3 +102,31 @@ async def test_write_turn_redis_failure_does_not_cascade(caplog):
     assert any("Redis write failed" in r.message for r in caplog.records)
     kg.update_graph.assert_called_once()
     episodic.write.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_session_redis_read_failure_does_not_crash(caplog):
+    """A Redis get error during cold-start must log a warning and return an empty session."""
+    from memoryweave.api.session import get_or_create_session, _sessions
+
+    _sessions.clear()
+
+    mock_redis = AsyncMock()
+    mock_redis.get = AsyncMock(side_effect=ConnectionError("Redis down"))
+    mock_redis.setex = AsyncMock()
+
+    mock_bundle = MagicMock()
+    mock_bundle.graph = object()
+    mock_bundle.working = WorkingMemoryAgent(max_turns=10)
+    mock_bundle.episodic = MagicMock()
+    mock_bundle.kg = MagicMock()
+
+    with patch("memoryweave.db.redis_client.get_redis", return_value=mock_redis), \
+         patch("memoryweave.agents.graph.build_read_graph_with_state", AsyncMock(return_value=mock_bundle)), \
+         caplog.at_level(logging.WARNING, logger="memoryweave.api.session"):
+        state = await get_or_create_session("session-redis-fail", provider="ollama")
+
+    assert state is not None
+    assert state.working.turn_count == 0
+    assert any("Redis read failed" in r.message for r in caplog.records)
+    _sessions.clear()
