@@ -1,7 +1,7 @@
 // API client for MemoryWeave FastAPI backend
 const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-export type Provider = 'ollama' | 'huggingface' | 'custom';
+export type Provider = 'ollama' | 'groq' | 'custom';
 
 export interface MemoryState {
   working_turns: { role: 'user' | 'bot'; text: string }[];

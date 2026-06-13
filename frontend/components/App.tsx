@@ -91,6 +91,7 @@ export default function App(props: { initialTab?: Tab }) {
   const [memQuery, setMemQuery] = useState('');
   const [provider, setProvider] = useState<Provider>('ollama');
   const [chatModel, setChatModel] = useState('');
+  const [configuredProvider, setConfiguredProvider] = useState<Provider | null>(null);
 
   // Session ID — persisted in sessionStorage
   const [sessionId] = useState(() => {
@@ -144,11 +145,14 @@ export default function App(props: { initialTab?: Tab }) {
   // Seed provider + chat model from saved user config on mount
   useEffect(() => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+    const validProviders: Provider[] = ['ollama', 'groq', 'custom'];
     fetch(`${apiUrl}/api/user/model-config`, { credentials: 'include' })
       .then(r => r.json())
       .then(data => {
         if (data.configured) {
-          setProvider(data.provider as Provider);
+          const p = validProviders.includes(data.provider) ? data.provider as Provider : 'ollama';
+          setProvider(p);
+          setConfiguredProvider(p);
           setChatModel(data.chat_model ?? '');
         }
       })
@@ -248,7 +252,7 @@ export default function App(props: { initialTab?: Tab }) {
       className={`app${showOnboarding ? ' onboarding-active' : ''}`}
       style={{ ['--left-w' as any]: leftW + 'px', ['--right-w' as any]: rightW + 'px' }}
     >
-      <Topbar tab={tab} onTab={setTab} provider={provider} onProvider={(p: Provider) => setProvider(p)} chatModel={chatModel} />
+      <Topbar tab={tab} onTab={setTab} provider={provider} onProvider={(p: Provider) => setProvider(p)} chatModel={chatModel} configuredProvider={configuredProvider} />
       {showOnboarding && <OnboardingBanner completedSteps={completedSteps} />}
       {tab === 'conversation' ? (
         <div className="main conv-main">

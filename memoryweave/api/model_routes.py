@@ -34,12 +34,12 @@ async def save_model_config(
     session: UserSession = Depends(verify_session),
     db: asyncpg.Connection = Depends(get_db),
 ):
-    if req.provider in ("huggingface", "custom") and req.hf_api_key:
+    if req.provider == "custom" and req.hf_api_key:
         try:
             api = HfApi(token=req.hf_api_key)
             await asyncio.to_thread(api.whoami)
         except Exception:
-            raise HTTPException(status_code=400, detail="Invalid HuggingFace API key")
+            raise HTTPException(status_code=400, detail="Invalid API key")
 
     repo = ModelConfigRepo(db)
     await repo.save(
