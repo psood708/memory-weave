@@ -1,5 +1,7 @@
 """Tests for working memory Redis persistence helpers."""
 import json
+import logging
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
@@ -64,3 +66,39 @@ def test_restore_empty_messages_clears_buffer():
 def test_working_memory_ttl_setting_exists_and_defaults_to_3600():
     from memoryweave.core.config import settings
     assert settings.working_memory_ttl == 3600
+
+
+@pytest.mark.asyncio
+async def test_write_turn_redis_failure_does_not_cascade(caplog):
+    """A Redis setex error must log a warning but not prevent KG/episodic writes."""
+    working = WorkingMemoryAgent(max_turns=10)
+    fused_result = MagicMock(importance_score=0.5)
+
+    kg = MagicMock()
+    kg.update_graph = AsyncMock(return_value=[])
+
+    episodic = MagicMock()
+    episodic.write = MagicMock(return_value=None)
+
+    state = SessionState(
+        session_id="test-redis-fail",
+        provider="ollama",
+        graph=object(),
+        working=working,
+        episodic=episodic,
+        kg=kg,
+    )
+    state.user_id = "user1"
+    state.turn_count = 1
+
+    mock_redis = AsyncMock()
+    mock_redis.setex = AsyncMock(side_effect=ConnectionError("Redis down"))
+
+    with patch("memoryweave.db.redis_client.get_redis", return_value=mock_redis), \
+         patch("asyncio.to_thread", AsyncMock(return_value=fused_result)), \
+         caplog.at_level(logging.WARNING, logger="memoryweave.api.session"):
+        await state.write_turn_async("hello", "hi")
+
+    assert any("Redis write failed" in r.message for r in caplog.records)
+    kg.update_graph.assert_called_once()
+    episodic.write.assert_called_once()

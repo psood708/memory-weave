@@ -53,12 +53,18 @@ class SessionState:
         from memoryweave.db.redis_client import get_redis
         r = get_redis()
         if r is not None:
-            payload = {"messages": self.working.to_json(), "turn_count": self.turn_count}
-            await r.setex(
-                f"working_mem:{self.session_id}:{self.user_id}",
-                settings.working_memory_ttl,
-                _json.dumps(payload),
-            )
+            try:
+                payload = {"messages": self.working.to_json(), "turn_count": self.turn_count}
+                await r.setex(
+                    f"working_mem:{self.session_id}:{self.user_id}",
+                    settings.working_memory_ttl,
+                    _json.dumps(payload),
+                )
+            except Exception:
+                _logger.warning(
+                    "Redis write failed for session %s — working memory not persisted this turn",
+                    self.session_id,
+                )
 
         turn_content = f"{user_input}\n{response}"
         fused = await asyncio.to_thread(self.kg.fused_extract, turn_content)
