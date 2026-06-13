@@ -59,3 +59,8 @@ def test_restore_empty_messages_clears_buffer():
     _restore_working_mem(state, payload)
     assert state.working.get() == []
     assert state.turn_count == 0
+
+
+def test_working_memory_ttl_setting_exists_and_defaults_to_3600():
+    from memoryweave.core.config import settings
+    assert settings.working_memory_ttl == 3600

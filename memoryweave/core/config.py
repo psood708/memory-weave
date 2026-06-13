@@ -21,6 +21,7 @@ class Settings(BaseSettings):
 
     # Working memory
     working_memory_max_turns: int = 10
+    working_memory_ttl: int = 3600
 
     # Episodic memory
     episodic_importance_threshold: float = 0.4

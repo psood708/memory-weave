@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 
 from langchain_core.messages import AIMessage, HumanMessage
 
+from memoryweave.core.config import settings
+
 _logger = logging.getLogger(__name__)
 
 from memoryweave.agents.episodic_memory import EpisodicMemoryAgent
@@ -55,7 +57,7 @@ class SessionState:
             payload = {"messages": self.working.to_json(), "turn_count": self.turn_count}
             await r.setex(
                 f"working_mem:{self.session_id}:{self.user_id}",
-                _SESSION_TTL,
+                settings.working_memory_ttl,
                 _json.dumps(payload),
             )
 
@@ -123,9 +125,6 @@ def clear_sessions() -> int:
     return count
 
 
-_SESSION_TTL = 3600  # 1 hour
-
-
 async def get_or_create_session(
     session_id: str, provider: str = "ollama", user_config=None
 ) -> SessionState:
@@ -157,7 +156,7 @@ async def get_or_create_session(
                 _restore_working_mem(state, raw)
             await r.setex(
                 redis_key,
-                _SESSION_TTL,
+                settings.working_memory_ttl,
                 _json.dumps({"provider": provider, "user_id": user_id}),
             )
         _sessions[key] = state
@@ -167,7 +166,7 @@ async def get_or_create_session(
             session.update_provider(provider, user_config)
         r = get_redis()
         if r is not None:
-            await r.expire(redis_key, _SESSION_TTL)
+            await r.expire(redis_key, settings.working_memory_ttl)
             # Resync working memory in case another replica wrote a newer snapshot
             raw = await r.get(f"working_mem:{key}")
             if raw:
