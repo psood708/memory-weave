@@ -336,10 +336,11 @@ function AuthModal({ mode, onClose, onSwitch, onSuccess }: AuthModalProps) {
 }
 
 /* ── Session-aware nav ──────────────────────────────────────────── */
-function Nav({ onSignin, onSignup, onDashboard, isAuthed }: {
+function Nav({ onSignin, onSignup, onDashboard, onDocs, isAuthed }: {
   onSignin: () => void;
   onSignup: () => void;
   onDashboard: () => void;
+  onDocs: () => void;
   isAuthed: boolean;
 }) {
   return (
@@ -351,7 +352,7 @@ function Nav({ onSignin, onSignup, onDashboard, isAuthed }: {
       </button>
       <div className="hn-links">
         <button className="hn-link" onClick={onDashboard}>Dashboard</button>
-        <span className="hn-link" style={{ cursor: 'default', color: 'var(--fg-4)' }}>Docs</span>
+        <button className="hn-link" onClick={onDocs}>Docs</button>
         <span className="hn-link" style={{ cursor: 'default', color: 'var(--fg-4)' }}>API</span>
       </div>
       <div className="hn-actions">
@@ -516,6 +517,7 @@ export default function LandingPage() {
   }, []);
 
   const goToDashboard = () => router.push('/dashboard');
+  const goToDocs = () => router.push('/dashboard?tab=docs');
 
   const handleGetStarted = () => {
     if (isAuthed) {
@@ -539,6 +541,7 @@ export default function LandingPage() {
         onSignin={handleSignin}
         onSignup={handleGetStarted}
         onDashboard={goToDashboard}
+        onDocs={goToDocs}
         isAuthed={isAuthed}
       />
       <Hero

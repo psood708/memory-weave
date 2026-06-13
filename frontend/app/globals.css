@@ -3579,3 +3579,172 @@ body.home-page {
 }
 .auth-success h3 { margin: 0; font: 500 18px/1.2 var(--font-serif); color: var(--fg-0); }
 .auth-success p  { margin: 0; font-size: 13px; color: var(--fg-2); }
+
+/* ============ Onboarding Banner ============ */
+.app.onboarding-active {
+  grid-template-rows: 48px auto 1fr;
+}
+
+.ob-banner {
+  border-bottom: 1px solid rgba(45, 212, 191, 0.12);
+  background: rgba(45, 212, 191, 0.03);
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.ob-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ob-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--teal, #2dd4bf);
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+}
+
+.ob-track {
+  display: flex;
+  gap: 3px;
+}
+
+.ob-seg {
+  width: 20px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  transition: background 300ms ease;
+}
+
+.ob-seg.done {
+  background: var(--teal, #2dd4bf);
+}
+
+.ob-count {
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 9px;
+  font-family: var(--font-mono);
+}
+
+.ob-steps {
+  display: flex;
+  gap: 6px;
+}
+
+.ob-step {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  transition: opacity 200ms ease;
+}
+
+.ob-step.done {
+  background: rgba(45, 212, 191, 0.05);
+  border-color: rgba(45, 212, 191, 0.15);
+  opacity: 0.55;
+}
+
+.ob-step.active {
+  background: rgba(167, 139, 250, 0.07);
+  border-color: rgba(167, 139, 250, 0.3);
+}
+
+.ob-step.locked {
+  background: rgba(255, 255, 255, 0.015);
+  border-color: rgba(255, 255, 255, 0.06);
+  opacity: 0.35;
+}
+
+.ob-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+  position: relative;
+}
+
+.ob-step.done .ob-dot {
+  border-color: var(--teal, #2dd4bf);
+  background: rgba(45, 212, 191, 0.15);
+}
+
+.ob-step.active .ob-dot {
+  border-color: var(--kg, #a78bfa);
+}
+
+.ob-check {
+  color: var(--teal, #2dd4bf);
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.ob-lock {
+  color: rgba(255, 255, 255, 0.2);
+  font-size: 8px;
+}
+
+.ob-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--kg, #a78bfa);
+  animation: ob-pulse 2s ease-in-out infinite;
+}
+
+@keyframes ob-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.7); }
+}
+
+.ob-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ob-step-label {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.65);
+  white-space: nowrap;
+}
+
+.ob-step.done .ob-step-label {
+  color: rgba(45, 212, 191, 0.5);
+  text-decoration: line-through;
+}
+
+.ob-step.active .ob-step-label {
+  color: var(--kg, #a78bfa);
+}
+
+.ob-step.locked .ob-step-label {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.ob-step-hint {
+  font-size: 8px;
+  color: rgba(255, 255, 255, 0.25);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+}

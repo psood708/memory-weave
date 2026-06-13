@@ -16,6 +16,9 @@ import {
 } from '@/lib/data';
 import { fetchMemoryState, resetSessions, streamChat } from '@/lib/api';
 import type { MemoryState, Provider } from '@/lib/api';
+import { useSession } from 'next-auth/react';
+import { useOnboarding } from '@/lib/useOnboarding';
+import OnboardingBanner from './OnboardingBanner';
 
 type Tab = 'conversation' | 'evals' | 'docs' | 'files';
 type Drawer =
@@ -73,6 +76,9 @@ function Resizer({
 
 export default function App(props: { initialTab?: Tab }) {
   const [tab, setTab] = useState<Tab>(props.initialTab ?? 'conversation');
+  const { data: session } = useSession();
+  const userId = session?.user?.email ?? null;
+  const { completedSteps, showOnboarding, markStepDone } = useOnboarding(userId);
   const [conv, setConv] = useState<ChatMessage[]>([]);
   const [budget, setBudget] = useState<Budget>(INITIAL_BUDGET);
   const [agentActive, setAgentActive] = useState(AGENT_STEPS.length);
@@ -117,6 +123,14 @@ export default function App(props: { initialTab?: Tab }) {
   useEffect(() => { try { localStorage.setItem('mw.leftCollapsed',  leftCollapsed  ? '1' : '0'); } catch {} }, [leftCollapsed]);
   useEffect(() => { try { localStorage.setItem('mw.rightCollapsed', rightCollapsed ? '1' : '0'); } catch {} }, [rightCollapsed]);
 
+  useEffect(() => {
+    if (!rightCollapsed) markStepDone(3);
+  }, [rightCollapsed, markStepDone]);
+
+  useEffect(() => {
+    if (tab === 'evals') markStepDone(4);
+  }, [tab, markStepDone]);
+
   const toastIdRef = useRef(0);
   const pushToast = useCallback((t: Omit<ToastItem, 'id'>) => {
     const id = ++toastIdRef.current;
@@ -124,6 +138,8 @@ export default function App(props: { initialTab?: Tab }) {
     setTimeout(() => setToasts(ts => ts.map(x => x.id === id ? { ...x, exit: true } : x)), 3200);
     setTimeout(() => setToasts(ts => ts.filter(x => x.id !== id)), 3500);
   }, []);
+
+  const onUploadSuccess = useCallback(() => markStepDone(2), [markStepDone]);
 
   // Seed provider + chat model from saved user config on mount
   useEffect(() => {
@@ -173,6 +189,7 @@ export default function App(props: { initialTab?: Tab }) {
   const onSend = useCallback(async (text: string, mode: 'memory' | 'question') => {
     const trimmed = text.trim();
     if (!trimmed) return;
+    markStepDone(1);
     const nextTurn = (conv[conv.length - 1]?.turn || 0) + 1;
     const ts = new Date().toLocaleString('en-US', { weekday: 'short' }) + ' · ' +
       new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -224,11 +241,15 @@ export default function App(props: { initialTab?: Tab }) {
         setConv(c => c.map((m, i) => i === c.length - 1 ? { ...m, streaming: false, text: `Error: ${err.message}` } : m));
       },
     });
-  }, [conv, sessionId, pushToast, provider]);
+  }, [conv, sessionId, pushToast, provider, markStepDone]);
 
   return (
-    <div className="app" style={{ ['--left-w' as any]: leftW + 'px', ['--right-w' as any]: rightW + 'px' }}>
+    <div
+      className={`app${showOnboarding ? ' onboarding-active' : ''}`}
+      style={{ ['--left-w' as any]: leftW + 'px', ['--right-w' as any]: rightW + 'px' }}
+    >
       <Topbar tab={tab} onTab={setTab} provider={provider} onProvider={(p: Provider) => setProvider(p)} chatModel={chatModel} />
+      {showOnboarding && <OnboardingBanner completedSteps={completedSteps} />}
       {tab === 'conversation' ? (
         <div className="main conv-main">
           {leftCollapsed ? (
@@ -313,7 +334,7 @@ export default function App(props: { initialTab?: Tab }) {
         </div>
       ) : tab === 'files' ? (
         <div className="evals-main">
-          <Files sessionId={sessionId} provider={provider} onToast={pushToast} />
+          <Files sessionId={sessionId} provider={provider} onToast={pushToast} onUploadSuccess={onUploadSuccess} />
         </div>
       ) : (
         <div className="evals-main">

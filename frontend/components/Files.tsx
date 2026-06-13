@@ -31,10 +31,12 @@ export default function Files({
   sessionId,
   provider,
   onToast,
+  onUploadSuccess,
 }: {
   sessionId: string;
   provider: string;
   onToast?: (t: { tier: 'episodic' | 'kg' | 'working'; text: string }) => void;
+  onUploadSuccess?: () => void;
 }) {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
   const [files, setFiles] = useState<FileRecord[]>([]);
@@ -68,6 +70,7 @@ export default function Files({
         onToast?.({ tier: 'episodic', text: `Upload failed: ${data.detail ?? res.statusText}` });
       } else {
         onToast?.({ tier: 'kg', text: `✦ ${file.name} indexed · ${data.chunk_count} chunks · ${data.kg_nodes} nodes` });
+        onUploadSuccess?.();
         await loadFiles();
       }
     } catch {
@@ -75,7 +78,7 @@ export default function Files({
     } finally {
       setUploading(false);
     }
-  }, [apiUrl, sessionId, provider, onToast, loadFiles]);
+  }, [apiUrl, sessionId, provider, onToast, onUploadSuccess, loadFiles]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
