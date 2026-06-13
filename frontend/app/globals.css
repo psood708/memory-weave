@@ -2342,6 +2342,8 @@ input, textarea { font: inherit; color: inherit; }
 }
 
 .provider-btn {
+  display: inline-flex;
+  align-items: center;
   padding: 3px 10px;
   border-radius: 4px;
   border: none;
@@ -2369,7 +2371,7 @@ input, textarea { font: inherit; color: inherit; }
   position: fixed; inset: 0;
   background: rgba(7, 9, 13, 0.6);
   backdrop-filter: blur(2px);
-  z-index: 50;
+  z-index: 250;
   display: flex; align-items: center; justify-content: center;
   animation: fade-in 160ms;
 }

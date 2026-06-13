@@ -7,7 +7,7 @@ import type { Provider } from '@/lib/api';
 const PROVIDER_LABEL: Record<Provider, string> = {
   ollama: 'ollama·local',
   groq: 'groq·cloud',
-  custom: 'custom·key',
+  custom: 'hf·key',
 };
 
 const PROVIDER_COLOR: Record<Provider, string> = {
@@ -26,10 +26,35 @@ const PROVIDER_WARNING: Partial<Record<Provider, { title: string; detail: string
     detail: 'Groq requires an API key from console.groq.com/keys. Add it in Setup to use Groq.',
   },
   custom: {
-    title: 'Custom provider not configured',
-    detail: 'A custom API key is required. Configure it in Setup to continue.',
+    title: 'HuggingFace key not configured',
+    detail: 'A HuggingFace API key is required. Configure it in Setup to continue.',
   },
 };
+
+type OllamaStatus = 'checking' | 'ok' | 'unreachable';
+
+const OLLAMA_STATUS_COLOR: Record<OllamaStatus, string> = {
+  checking: 'rgba(255,255,255,0.2)',
+  ok: 'var(--ok)',
+  unreachable: '#f87171',
+};
+
+const OLLAMA_STATUS_LABEL: Record<OllamaStatus, string> = {
+  checking: 'Checking Ollama…',
+  ok: 'Ollama reachable',
+  unreachable: 'Ollama unreachable — run: ollama serve',
+};
+
+async function pingOllama(): Promise<boolean> {
+  try {
+    const res = await fetch('http://localhost:11434/api/tags', {
+      signal: AbortSignal.timeout(2000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
 
 export default function Topbar({
   tab, onTab, provider, onProvider, chatModel, configuredProvider,
@@ -42,7 +67,9 @@ export default function Topbar({
   configuredProvider?: Provider | null;
 }) {
   const [warning, setWarning] = useState<Provider | null>(null);
+  const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus>('checking');
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const handleProviderClick = (p: Provider) => {
     onProvider(p);
@@ -54,6 +81,21 @@ export default function Topbar({
       setWarning(null);
     }
   };
+
+  // Poll Ollama health every 30s
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      const ok = await pingOllama();
+      if (!cancelled) setOllamaStatus(ok ? 'ok' : 'unreachable');
+    };
+    check();
+    pollRef.current = setInterval(check, 30_000);
+    return () => {
+      cancelled = true;
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
 
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
 
@@ -78,8 +120,20 @@ export default function Topbar({
             <button
               className={`provider-btn ${provider === 'ollama' ? 'active' : ''}`}
               onClick={() => handleProviderClick('ollama')}
-              title="Run locally with Ollama"
+              title={OLLAMA_STATUS_LABEL[ollamaStatus]}
             >
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: 6, height: 6,
+                  borderRadius: '50%',
+                  background: OLLAMA_STATUS_COLOR[ollamaStatus],
+                  marginRight: 5,
+                  flexShrink: 0,
+                  transition: 'background 400ms',
+                  ...(ollamaStatus === 'ok' ? { boxShadow: '0 0 0 2px rgba(52,211,153,0.2)' } : {}),
+                }}
+              />
               Ollama
             </button>
             <button
@@ -92,9 +146,9 @@ export default function Topbar({
             <button
               className={`provider-btn ${provider === 'custom' ? 'active' : ''}`}
               onClick={() => handleProviderClick('custom')}
-              title="Use your own API key (configured in Setup)"
+              title="Use HuggingFace API key (configured in Setup)"
             >
-              Custom
+              HF
             </button>
           </div>
           {warn && (
@@ -139,9 +193,19 @@ export default function Topbar({
             </div>
           )}
         </div>
-        <span className="kv" style={{ minWidth: 120 }}>
+        <span className="kv" style={{ width: 170, flexShrink: 0, overflow: 'hidden' }}>
           <span className="kv-k">provider</span>
-          <span className="kv-v" style={{ color: PROVIDER_COLOR[provider] }}>
+          <span
+            className="kv-v"
+            style={{
+              color: PROVIDER_COLOR[provider],
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              minWidth: 0,
+            }}
+            title={provider === 'custom' && chatModel ? chatModel : PROVIDER_LABEL[provider]}
+          >
             {provider === 'custom' && chatModel
               ? chatModel.split('/').pop()
               : PROVIDER_LABEL[provider]}

@@ -183,6 +183,7 @@ async def get_or_create_session(
                 await r.expire(redis_key, settings.working_memory_ttl)
             except Exception:
                 _logger.warning("Redis expire failed for session %s", key)
+            # Resync working memory in case another replica wrote a newer snapshot
             try:
                 raw = await r.get(f"working_mem:{key}")
                 if raw:

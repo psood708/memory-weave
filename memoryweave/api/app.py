@@ -262,13 +262,13 @@ async def chat_stream(
             except Exception:
                 logger.exception("eval_bus emit failed for question mode turn %d", session.turn_count)
         else:
-            await session.write_turn_async(
+            asyncio.create_task(session.write_turn_async(
                 req.message,
                 response_text,
                 total_latency_ms=int(latency * 1000),
                 kg_context=kg_context,
                 retrieved_episode_texts=ep_texts,
-            )
+            ))
             yield _sse("memory_updated", {})
 
     return StreamingResponse(
