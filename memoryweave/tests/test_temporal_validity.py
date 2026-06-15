@@ -61,6 +61,8 @@ def test_format_context_excludes_inactive_edges(store):
 
 def test_load_backfills_validity_on_old_edges(tmp_path):
     """Old serialized graphs missing validity fields get defaults on load."""
+    from unittest.mock import patch
+
     g = nx.DiGraph()
     g.add_node("Alice", type="Person", description="dev")
     g.add_node("Proj", type="Project", description="work")
@@ -72,7 +74,8 @@ def test_load_backfills_validity_on_old_edges(tmp_path):
     (user_dir / "kg_store.json").write_text(raw)
     backend = FileKGBackend(str(tmp_path))
     s = KnowledgeGraphStore(backend=backend, user_id="u1")
-    asyncio.run(s.load())
+    with patch.object(KnowledgeGraphStore, "_rebuild_embeddings"):
+        asyncio.run(s.load())
     data = s._graph["Alice"]["Proj"]
     assert data["is_active"] == 1
     assert data["valid_until"] is None

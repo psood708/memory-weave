@@ -49,6 +49,7 @@ class Episode:
 
 class EpisodicStore:
     def __init__(self, collection_name: str = "episodes", persist_dir: str = ".chroma", backend=None):
+        self._collection_name = collection_name
         if backend is not None:
             self._backend = backend
         elif _settings.qdrant_url:
@@ -82,7 +83,7 @@ class EpisodicStore:
         self._backend.upsert([id_], [doc], [meta])
 
     def retrieve(self, query: str, top_k: int = 5) -> list[Episode]:
-        results = self._backend.query(query, top_k, where={"is_active": {"$eq": 1}})
+        results = self._backend.query(query, top_k, where={"is_active": 1})
         return [Episode.from_metadata(id_, doc, meta) for id_, doc, meta in results]
 
     def list_all(self) -> list[Episode]:
@@ -132,6 +133,10 @@ class EpisodicStore:
     @property
     def turn_count(self) -> int:
         return self._turn_counter
+
+    @property
+    def session_id(self) -> str:
+        return self._collection_name
 
     @staticmethod
     def new_id() -> str:

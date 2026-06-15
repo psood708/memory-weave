@@ -42,14 +42,16 @@ def test_fused_extract_handles_bad_json():
 
 
 def test_episodic_write_uses_external_score():
+    import uuid
     from memoryweave.agents.episodic_memory import EpisodicMemoryAgent
     from langchain_core.messages import HumanMessage, AIMessage
-    import tempfile, os
+    import tempfile
     from memoryweave.memory.episodic_store import EpisodicStore
 
+    session_id = f"test_{uuid.uuid4().hex}"
     with tempfile.TemporaryDirectory() as tmp:
-        store = EpisodicStore(persist_dir=tmp)
-        agent = EpisodicMemoryAgent(session_id="test", store=store)
+        store = EpisodicStore(collection_name=session_id, persist_dir=tmp)
+        agent = EpisodicMemoryAgent(session_id=session_id, store=store)
         msgs = [HumanMessage(content="hi"), AIMessage(content="hello")]
 
         # score below threshold — nothing stored

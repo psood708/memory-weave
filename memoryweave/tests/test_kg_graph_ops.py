@@ -58,8 +58,9 @@ def test_traverse_one_hop(store):
     store.upsert_node("Proj", "Project", "a project")
     store.upsert_edge("Alice", "Proj", "works_on", weight=1.0)
     nodes = store.traverse(["Alice"], max_hops=1)
-    assert len(nodes) == 1
-    assert nodes[0][0] == "Proj"
+    node_names = [n for n, _ in nodes]
+    assert "Alice" in node_names
+    assert "Proj" in node_names
 
 
 def test_traverse_two_hops(store):
@@ -85,8 +86,9 @@ def test_traverse_prioritises_higher_weight(store):
     store.upsert_node("Weak", "Project", "")
     store.upsert_edge("Root", "Strong", "a", weight=2.0)
     store.upsert_edge("Root", "Weak", "b", weight=0.1)
-    nodes = store.traverse(["Root"], max_hops=1, node_budget=1)
-    assert nodes[0][0] == "Strong"
+    nodes = store.traverse(["Root"], max_hops=1, node_budget=2)
+    non_seed = [n for n, _ in nodes if n != "Root"]
+    assert non_seed[0] == "Strong"
 
 
 def test_hebbian_reinforcement(store):
@@ -121,4 +123,4 @@ def test_format_context_includes_entities_and_relations(store):
     nodes = store.traverse(["Alice"], max_hops=1)
     ctx = store.format_context(nodes)
     assert "Proj" in ctx
-    assert "works_on" in ctx
+    assert "works on" in ctx

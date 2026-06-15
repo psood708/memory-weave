@@ -1,5 +1,9 @@
+import pytest
+
 from memoryweave.agents.graph import build_graph
 from memoryweave.core.state import MemoryWeaveState
+
+pytestmark = pytest.mark.usefixtures("require_ollama")
 
 
 def _state(user_input: str) -> MemoryWeaveState:

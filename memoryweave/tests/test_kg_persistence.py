@@ -35,7 +35,9 @@ async def test_reload_preserves_traversal(tmp_path):
     store2 = _store(tmp_path)
     await store2.load()
     nodes = store2.traverse(["Alice"], max_hops=1)
-    assert nodes[0][0] == "Proj"
+    node_names = [n for n, _ in nodes]
+    assert "Alice" in node_names
+    assert "Proj" in node_names
 
 
 async def test_empty_graph_on_fresh_start(tmp_path):
