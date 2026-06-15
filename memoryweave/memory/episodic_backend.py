@@ -66,20 +66,43 @@ class ChromaEpisodicBackend:
 
 class QdrantEpisodicBackend:
     _COLLECTION = "episodes"
+    _FASTEMBED_MODEL = "BAAI/bge-small-en-v1.5"
+    _VECTOR_NAME = "fast-bge-small-en"
+    _VECTOR_SIZE = 384
 
     def __init__(self, session_id: str, client=None):
         from memoryweave.core.config import settings as _s
 
         if client is not None:
             self._client = client
+            self._is_server = False
         elif _s.qdrant_url:
             from qdrant_client import QdrantClient
             self._client = QdrantClient(url=_s.qdrant_url, api_key=_s.qdrant_api_key or None)
+            self._is_server = True
         else:
             from qdrant_client import QdrantClient
             self._client = QdrantClient(path=".qdrant")
+            self._is_server = False
         self._session_id = session_id
-        self._ensure_payload_index()
+        self._ensure_collection()
+        if self._is_server:
+            self._ensure_payload_index()
+
+    def _ensure_collection(self) -> None:
+        from qdrant_client.models import Distance, VectorParams
+        try:
+            self._client.get_collection(self._COLLECTION)
+            return
+        except Exception:
+            pass
+        try:
+            self._client.create_collection(
+                collection_name=self._COLLECTION,
+                vectors_config={self._VECTOR_NAME: VectorParams(size=self._VECTOR_SIZE, distance=Distance.COSINE)},
+            )
+        except Exception:
+            pass  # already created by a concurrent caller
 
     def _ensure_payload_index(self) -> None:
         from qdrant_client.models import PayloadSchemaType
@@ -101,15 +124,18 @@ class QdrantEpisodicBackend:
         return Filter(must=[FieldCondition(key="session_id", match=MatchValue(value=self._session_id))])
 
     def upsert(self, ids: list[str], documents: list[str], metadatas: list[dict]) -> None:
-        self._client.add(
+        from qdrant_client.models import Document, PointStruct
+        self._client.upsert(
             collection_name=self._COLLECTION,
-            documents=documents,
-            metadata=metadatas,
-            ids=ids,
+            points=[
+                PointStruct(
+                    id=point_id,
+                    vector={self._VECTOR_NAME: Document(text=doc, model=self._FASTEMBED_MODEL)},
+                    payload={**meta, "document": doc},
+                )
+                for point_id, doc, meta in zip(ids, documents, metadatas)
+            ],
         )
-
-    _FASTEMBED_MODEL = "BAAI/bge-small-en-v1.5"
-    _VECTOR_NAME = "fast-bge-small-en"
 
     def query(self, query_text: str, n_results: int, where: dict | None = None) -> list[tuple[str, str, dict]]:
         from qdrant_client.models import Document, FieldCondition, Filter, MatchValue
