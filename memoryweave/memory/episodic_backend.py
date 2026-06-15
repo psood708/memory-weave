@@ -23,14 +23,17 @@ class ChromaEpisodicBackend:
     def upsert(self, ids: list[str], documents: list[str], metadatas: list[dict]) -> None:
         self._col.upsert(ids=ids, documents=documents, metadatas=metadatas)
 
-    def query(self, query_text: str, n_results: int) -> list[tuple[str, str, dict]]:
+    def query(self, query_text: str, n_results: int, where: dict | None = None) -> list[tuple[str, str, dict]]:
         if self._col.count() == 0:
             return []
-        results = self._col.query(
-            query_texts=[query_text],
-            n_results=min(n_results, self._col.count()),
-            include=["documents", "metadatas"],
-        )
+        kwargs: dict = {
+            "query_texts": [query_text],
+            "n_results": min(n_results, self._col.count()),
+            "include": ["documents", "metadatas"],
+        }
+        if where:
+            kwargs["where"] = where
+        results = self._col.query(**kwargs)
         return list(zip(results["ids"][0], results["documents"][0], results["metadatas"][0]))
 
     def get_all(self) -> list[tuple[str, str, dict]]:
@@ -79,17 +82,19 @@ class QdrantEpisodicBackend:
         self._ensure_payload_index()
 
     def _ensure_payload_index(self) -> None:
-        # Qdrant Cloud strict mode blocks filtering on unindexed fields.
-        # A keyword index on session_id is required for per-session isolation to work.
         from qdrant_client.models import PayloadSchemaType
-        try:
-            self._client.create_payload_index(
-                collection_name=self._COLLECTION,
-                field_name="session_id",
-                field_schema=PayloadSchemaType.KEYWORD,
-            )
-        except Exception:
-            pass  # index already exists — not an error
+        for field_name, schema in [
+            ("session_id", PayloadSchemaType.KEYWORD),
+            ("is_active", PayloadSchemaType.INTEGER),
+        ]:
+            try:
+                self._client.create_payload_index(
+                    collection_name=self._COLLECTION,
+                    field_name=field_name,
+                    field_schema=schema,
+                )
+            except Exception:
+                pass
 
     def _filter(self):
         from qdrant_client.models import FieldCondition, Filter, MatchValue
@@ -103,13 +108,16 @@ class QdrantEpisodicBackend:
             ids=ids,
         )
 
-    def query(self, query_text: str, n_results: int) -> list[tuple[str, str, dict]]:
-        # client.query() returns QueryResponse with .document / .metadata (not .payload)
+    def query(self, query_text: str, n_results: int, where: dict | None = None) -> list[tuple[str, str, dict]]:
+        from qdrant_client.models import FieldCondition, Filter, MatchValue
+        conditions = [FieldCondition(key="session_id", match=MatchValue(value=self._session_id))]
+        if where and "is_active" in where:
+            conditions.append(FieldCondition(key="is_active", match=MatchValue(value=int(where["is_active"]))))
         try:
             results = self._client.query(
                 collection_name=self._COLLECTION,
                 query_text=query_text,
-                query_filter=self._filter(),
+                query_filter=Filter(must=conditions),
                 limit=n_results,
             )
         except Exception:

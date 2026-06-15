@@ -1,5 +1,6 @@
 import heapq
 import math
+from datetime import datetime, timezone
 
 import networkx as nx
 
@@ -42,6 +43,14 @@ class KnowledgeGraphStore:
         vecs = list(embedder.embed(texts))
         self._node_embeddings = {name: list(vec) for (name, _), vec in zip(nodes, vecs)}
 
+    def _backfill_validity(self) -> None:
+        """Set validity defaults on edges loaded from pre-v2 serialized graphs."""
+        for _, _, data in self._graph.edges(data=True):
+            data.setdefault("valid_from", datetime.now(timezone.utc).isoformat())
+            data.setdefault("valid_until", None)
+            data.setdefault("is_active", 1)
+            data.setdefault("superseded_by", None)
+
     def semantic_seed_search(self, query: str, top_k: int = 4, threshold: float = 0.25) -> list[str]:
         """Return top-k node names by cosine similarity to query. Falls back to [] on empty graph."""
         if not self._node_embeddings and self._graph.number_of_nodes() > 0:
@@ -64,6 +73,7 @@ class KnowledgeGraphStore:
         data = await self._backend.load(self._user_id)
         if data:
             self._graph = nx.node_link_graph(data, directed=True, multigraph=False)
+            self._backfill_validity()
             self._rebuild_embeddings()
         else:
             self._graph = nx.DiGraph()
@@ -90,7 +100,34 @@ class KnowledgeGraphStore:
 
     def upsert_edge(self, source: str, target: str, rel_type: str, weight: float = 1.0) -> None:
         if not self._graph.has_edge(source, target):
-            self._graph.add_edge(source, target, rel_type=rel_type, weight=weight)
+            self._graph.add_edge(
+                source, target,
+                rel_type=rel_type,
+                weight=weight,
+                valid_from=datetime.now(timezone.utc).isoformat(),
+                valid_until=None,
+                is_active=1,
+                superseded_by=None,
+            )
+
+    def _soft_supersede(
+        self,
+        old_src: str,
+        old_tgt: str,
+        new_src: str,
+        new_tgt: str,
+        now: datetime | None = None,
+    ) -> None:
+        if not self._graph.has_edge(old_src, old_tgt):
+            return
+        data = self._graph[old_src][old_tgt]
+        if not data.get("is_active", 1):
+            return
+        if now is None:
+            now = datetime.now(timezone.utc)
+        data["valid_until"] = now.isoformat()
+        data["is_active"] = 0
+        data["superseded_by"] = f"{new_src}->{new_tgt}"
 
     # ── Read ops ─────────────────────────────────────────────────────────────
 
@@ -114,10 +151,14 @@ class KnowledgeGraphStore:
 
         for seed in seed_names:
             for _, nbr, data in self._graph.out_edges(seed, data=True):
+                if not data.get("is_active", 1):
+                    continue
                 heapq.heappush(heap, (-data["weight"], _ctr, 0, seed, nbr))
                 _ctr += 1
             # Bidirectional: in-edges surface nodes that point TO the seed
             for src, _, data in self._graph.in_edges(seed, data=True):
+                if not data.get("is_active", 1):
+                    continue
                 if src not in visited:
                     heapq.heappush(heap, (-data.get("weight", 1.0), _ctr, 0, seed, src))
                     _ctr += 1
@@ -132,10 +173,14 @@ class KnowledgeGraphStore:
 
             if depth + 1 < max_hops:
                 for _, nbr, data in self._graph.out_edges(node, data=True):
+                    if not data.get("is_active", 1):
+                        continue
                     if nbr not in visited:
                         heapq.heappush(heap, (-data["weight"], _ctr, depth + 1, node, nbr))
                         _ctr += 1
                 for src, _, data in self._graph.in_edges(node, data=True):
+                    if not data.get("is_active", 1):
+                        continue
                     if src not in visited:
                         heapq.heappush(heap, (-data.get("weight", 1.0), _ctr, depth + 1, node, src))
                         _ctr += 1
@@ -168,11 +213,15 @@ class KnowledgeGraphStore:
         triple_lines = []
         for name, _ in nodes:
             for _, nbr, data in self._graph.out_edges(name, data=True):
+                if not data.get("is_active", 1):
+                    continue
                 if (name, nbr) not in seen:
                     seen.add((name, nbr))
                     rel = data.get("rel_type", "related_to").replace("_", " ")
                     triple_lines.append(f"  ({name}, {rel}, {nbr})")
             for src, _, data in self._graph.in_edges(name, data=True):
+                if not data.get("is_active", 1):
+                    continue
                 if (src, name) not in seen:
                     seen.add((src, name))
                     rel = data.get("rel_type", "related_to").replace("_", " ")
@@ -195,6 +244,8 @@ class KnowledgeGraphStore:
         connecting nodes that BFS misses. Hebbian edge weights drive transition probs.
         Falls back to BFS for single-seed queries (PPR degenerates there).
         """
+        # TODO(temporal): nx.pagerank sees inactive edges — superseded nodes can score
+        # higher than expected in multi-seed queries. Filter when FalkorDB replaces NetworkX.
         seeds = [n for n in seed_names if self._graph.has_node(n)]
         if not seeds:
             return []
