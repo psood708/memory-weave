@@ -108,25 +108,30 @@ class QdrantEpisodicBackend:
             ids=ids,
         )
 
+    _FASTEMBED_MODEL = "BAAI/bge-small-en-v1.5"
+    _VECTOR_NAME = "fast-bge-small-en"
+
     def query(self, query_text: str, n_results: int, where: dict | None = None) -> list[tuple[str, str, dict]]:
-        from qdrant_client.models import FieldCondition, Filter, MatchValue
+        from qdrant_client.models import Document, FieldCondition, Filter, MatchValue
         conditions = [FieldCondition(key="session_id", match=MatchValue(value=self._session_id))]
         if where and "is_active" in where:
             conditions.append(FieldCondition(key="is_active", match=MatchValue(value=int(where["is_active"]))))
         try:
-            results = self._client.query(
+            response = self._client.query_points(
                 collection_name=self._COLLECTION,
-                query_text=query_text,
+                query=Document(text=query_text, model=self._FASTEMBED_MODEL),
+                using=self._VECTOR_NAME,
                 query_filter=Filter(must=conditions),
                 limit=n_results,
             )
+            results = response.points
         except Exception:
             return []
         out = []
         for r in results:
-            doc = (r.document or "") if hasattr(r, "document") else ""
-            raw_meta = (r.metadata or {}) if hasattr(r, "metadata") else {}
-            meta = {k: v for k, v in raw_meta.items() if k != "document"}
+            payload = r.payload or {}
+            doc = payload.get("document", "")
+            meta = {k: v for k, v in payload.items() if k != "document"}
             out.append((str(r.id), doc, meta))
         return out
 

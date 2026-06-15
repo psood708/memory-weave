@@ -20,7 +20,7 @@ class RagasJudge(BaseJudge):
     def _score_sync(self, question: str, contexts: list[str], answer: str) -> JudgeResult:
         from datasets import Dataset
         from ragas import evaluate
-        from ragas.metrics import context_precision, faithfulness
+        from ragas.metrics.collections import context_precision, faithfulness
 
         data = {
             "question": [question],
