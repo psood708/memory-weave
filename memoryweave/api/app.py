@@ -12,7 +12,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from memoryweave.auth.models import UserSession
 from memoryweave.auth.session import verify_session
@@ -66,6 +66,10 @@ async def lifespan(app: FastAPI):
     if "*" in settings.cors_origins:
         raise RuntimeError(
             "CORS_ORIGINS must not contain '*' — set it to the explicit frontend origin(s) in your environment."
+        )
+    if not settings.auth_secret:
+        raise RuntimeError(
+            "AUTH_SECRET is not set — generate one with: openssl rand -base64 32"
         )
     await init_pool()
     await init_redis()
@@ -131,7 +135,7 @@ app.include_router(file_router)
 
 class ChatRequest(BaseModel):
     session_id: str
-    message: str
+    message: str = Field(..., max_length=4000)
     provider: str = "ollama"
     mode: str = "memory"  # "memory" | "question"
 
@@ -395,7 +399,7 @@ async def get_memory(
 # ── POST /api/sessions/reset ──────────────────────────────────────────────────
 
 @app.post("/api/sessions/reset")
-async def reset_sessions():
+async def reset_sessions(user_session: UserSession = Depends(verify_session)):
     """Flush in-memory sessions so the next request reloads KG and episodes from storage."""
     count = clear_sessions()
     return {"cleared": count}
