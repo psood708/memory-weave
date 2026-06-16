@@ -34,7 +34,7 @@ async def save_model_config(
     session: UserSession = Depends(verify_session),
     db: asyncpg.Connection = Depends(get_db),
 ):
-    if req.provider == "custom" and req.hf_api_key:
+    if req.provider in ("custom", "huggingface") and req.hf_api_key:
         try:
             api = HfApi(token=req.hf_api_key)
             await asyncio.to_thread(api.whoami)

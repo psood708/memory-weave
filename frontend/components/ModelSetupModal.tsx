@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-type Provider = "groq" | "ollama";
+type Provider = "groq" | "ollama" | "huggingface";
 type CatalogEntry = { id: string; label: string };
 type Catalog = { chat: CatalogEntry[]; embedding: CatalogEntry[]; judge: CatalogEntry[] };
 
@@ -50,6 +50,23 @@ const PROVIDERS: {
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
         <circle cx="12" cy="12" r="10" stroke="#a78bfa" strokeWidth="1.5" />
         <text x="12" y="16" textAnchor="middle" fontSize="9" fill="#a78bfa" fontWeight="700">OL</text>
+      </svg>
+    ),
+  },
+  {
+    id: "huggingface",
+    name: "HuggingFace",
+    tag: "Open models",
+    description: "Access thousands of open-source models via HuggingFace Inference API.",
+    color: "#f59e0b",
+    keyUrl: "https://huggingface.co/settings/tokens",
+    keyLabel: "HuggingFace Access Token",
+    keyPlaceholder: "hf_••••••••••••••••••••••••••••••••••••••",
+    keyHint: "huggingface.co/settings/tokens",
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="10" stroke="#f59e0b" strokeWidth="1.5" />
+        <text x="12" y="16" textAnchor="middle" fontSize="9" fill="#f59e0b" fontWeight="700">HF</text>
       </svg>
     ),
   },
@@ -314,7 +331,9 @@ export default function ModelSetupModal() {
               color: "rgba(255,255,255,0.4)", fontSize: 12,
               margin: 0, lineHeight: 1.5,
             }}>
-              Create a free Groq account and generate an API key from the console. No credit card required.
+              {provider === "groq"
+                ? "Create a free Groq account and generate an API key from the console. No credit card required."
+                : "Create a HuggingFace account and generate a read-access token from your settings page."}
             </p>
             <a
               href={selectedProvider.keyUrl!}
