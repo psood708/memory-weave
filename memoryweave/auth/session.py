@@ -7,13 +7,14 @@ from memoryweave.core.config import settings
 from memoryweave.db.database import get_db, new_uuid
 
 _COOKIE_NAME = "authjs.session-token"
+_SECURE_COOKIE_NAME = "__Secure-authjs.session-token"  # Auth.js uses this prefix on HTTPS
 
 
 async def verify_session(
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
 ) -> UserSession:
-    token = request.cookies.get(_COOKIE_NAME)
+    token = request.cookies.get(_SECURE_COOKIE_NAME) or request.cookies.get(_COOKIE_NAME)
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:

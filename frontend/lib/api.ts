@@ -1,5 +1,5 @@
 // API client for MemoryWeave FastAPI backend
-const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const BASE = '/proxy';
 
 export type Provider = 'ollama' | 'groq' | 'custom';
 

@@ -83,7 +83,7 @@ export default function EvalDashboard({ sessionId, memoryState }: Props) {
   const [retrievalSummary, setRetrievalSummary] = useState<RetrievalSummary | null>(null);
   const [retrievalTurns, setRetrievalTurns] = useState<RetrievalTurn[]>([]);
   const [expandedRetTurn, setExpandedRetTurn] = useState<number | null>(null);
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+  const apiUrl = '/proxy';
 
   const load = useCallback(() => {
     fetch(`${apiUrl}/eval/metrics?session_id=${sessionId}`, { credentials: 'include' })

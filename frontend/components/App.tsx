@@ -144,7 +144,7 @@ export default function App(props: { initialTab?: Tab }) {
 
   // Seed provider + chat model from saved user config on mount
   useEffect(() => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+    const apiUrl = '/proxy';
     const validProviders: Provider[] = ['ollama', 'groq', 'custom'];
     fetch(`${apiUrl}/api/user/model-config`, { credentials: 'include' })
       .then(r => r.json())
