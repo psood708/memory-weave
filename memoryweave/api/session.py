@@ -6,12 +6,13 @@ from datetime import datetime, timezone
 
 from langchain_core.messages import AIMessage, HumanMessage
 
-_logger = logging.getLogger(__name__)
-
 from memoryweave.agents.episodic_memory import EpisodicMemoryAgent
 from memoryweave.agents.graph import GraphWithAgents, build_read_graph_with_state
 from memoryweave.agents.kg_agent import KGAgent
 from memoryweave.agents.working_memory import WorkingMemoryAgent
+from memoryweave.core.config import settings
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -52,12 +53,18 @@ class SessionState:
         from memoryweave.db.redis_client import get_redis
         r = get_redis()
         if r is not None:
-            payload = {"messages": self.working.to_json(), "turn_count": self.turn_count}
-            await r.setex(
-                f"working_mem:{self.session_id}:{self.user_id}",
-                _SESSION_TTL,
-                _json.dumps(payload),
-            )
+            try:
+                payload = {"messages": self.working.to_json(), "turn_count": self.turn_count}
+                await r.setex(
+                    f"working_mem:{self.session_id}:{self.user_id}",
+                    settings.working_memory_ttl,
+                    _json.dumps(payload),
+                )
+            except Exception:
+                _logger.warning(
+                    "Redis write failed for session %s — working memory not persisted this turn",
+                    self.session_id,
+                )
 
         turn_content = f"{user_input}\n{response}"
         fused = await asyncio.to_thread(self.kg.fused_extract, turn_content)
@@ -123,9 +130,6 @@ def clear_sessions() -> int:
     return count
 
 
-_SESSION_TTL = 3600  # 1 hour
-
-
 async def get_or_create_session(
     session_id: str, provider: str = "ollama", user_config=None
 ) -> SessionState:
@@ -152,14 +156,22 @@ async def get_or_create_session(
         state.user_id = user_id
         r = get_redis()
         if r is not None:
-            raw = await r.get(f"working_mem:{key}")
-            if raw:
-                _restore_working_mem(state, raw)
-            await r.setex(
-                redis_key,
-                _SESSION_TTL,
-                _json.dumps({"provider": provider, "user_id": user_id}),
-            )
+            try:
+                raw = await r.get(f"working_mem:{key}")
+                if raw:
+                    _restore_working_mem(state, raw)
+            except Exception:
+                _logger.warning(
+                    "Redis read failed for session %s — starting with empty working memory", key
+                )
+            try:
+                await r.setex(
+                    redis_key,
+                    settings.working_memory_ttl,
+                    _json.dumps({"provider": provider, "user_id": user_id}),
+                )
+            except Exception:
+                _logger.warning("Redis setex failed for session meta %s", key)
         _sessions[key] = state
     else:
         session = _sessions[key]
@@ -167,10 +179,18 @@ async def get_or_create_session(
             session.update_provider(provider, user_config)
         r = get_redis()
         if r is not None:
-            await r.expire(redis_key, _SESSION_TTL)
+            try:
+                await r.expire(redis_key, settings.working_memory_ttl)
+            except Exception:
+                _logger.warning("Redis expire failed for session %s", key)
             # Resync working memory in case another replica wrote a newer snapshot
-            raw = await r.get(f"working_mem:{key}")
-            if raw:
-                _restore_working_mem(session, raw)
+            try:
+                raw = await r.get(f"working_mem:{key}")
+                if raw:
+                    _restore_working_mem(session, raw)
+            except Exception:
+                _logger.warning(
+                    "Redis read failed for session %s — working memory resync skipped", key
+                )
 
     return _sessions[key]

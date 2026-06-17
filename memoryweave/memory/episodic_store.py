@@ -1,7 +1,7 @@
 import math
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
 from memoryweave.core.config import settings as _settings
 
@@ -15,6 +15,9 @@ class Episode:
     session_id: str
     turn_number: int
     entity_ids: list[str] = field(default_factory=list)
+    valid_from: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    valid_until: str | None = None
+    is_active: bool = True
 
     def to_metadata(self) -> dict:
         return {
@@ -23,6 +26,9 @@ class Episode:
             "session_id": self.session_id,
             "turn_number": self.turn_number,
             "entity_ids": ",".join(self.entity_ids),
+            "valid_from": self.valid_from,
+            "valid_until": self.valid_until or "",
+            "is_active": 1 if self.is_active else 0,
         }
 
     @classmethod
@@ -35,11 +41,15 @@ class Episode:
             session_id=meta["session_id"],
             turn_number=int(meta["turn_number"]),
             entity_ids=[e for e in meta.get("entity_ids", "").split(",") if e],
+            valid_from=meta.get("valid_from", datetime.now(timezone.utc).isoformat()),
+            valid_until=meta.get("valid_until") or None,
+            is_active=bool(int(meta.get("is_active", 1))),
         )
 
 
 class EpisodicStore:
     def __init__(self, collection_name: str = "episodes", persist_dir: str = ".chroma", backend=None):
+        self._collection_name = collection_name
         if backend is not None:
             self._backend = backend
         elif _settings.qdrant_url:
@@ -63,8 +73,17 @@ class EpisodicStore:
             metadatas=[episode.to_metadata()],
         )
 
+    def mark_episode_inactive(self, episode_id: str) -> None:
+        items = self._backend.get_by_ids([episode_id])
+        if not items:
+            return
+        id_, doc, meta = items[0]
+        meta["is_active"] = 0
+        meta["valid_until"] = datetime.now(timezone.utc).isoformat()
+        self._backend.upsert([id_], [doc], [meta])
+
     def retrieve(self, query: str, top_k: int = 5) -> list[Episode]:
-        results = self._backend.query(query, top_k)
+        results = self._backend.query(query, top_k, where={"is_active": 1})
         return [Episode.from_metadata(id_, doc, meta) for id_, doc, meta in results]
 
     def list_all(self) -> list[Episode]:
@@ -114,6 +133,10 @@ class EpisodicStore:
     @property
     def turn_count(self) -> int:
         return self._turn_counter
+
+    @property
+    def session_id(self) -> str:
+        return self._collection_name
 
     @staticmethod
     def new_id() -> str:

@@ -104,8 +104,8 @@ export default function Settings({
               </div>
               <div className="settings-kv">
                 <span className="sk">Provider</span>
-                <span className="sv" style={{ color: provider === 'huggingface' ? 'var(--episodic)' : 'var(--working)' }}>
-                  {provider === 'huggingface' ? 'HuggingFace' : 'Ollama · local'}
+                <span className="sv" style={{ color: provider === 'groq' ? 'var(--episodic)' : 'var(--working)' }}>
+                  {provider === 'groq' ? 'Groq · cloud' : provider === 'custom' ? 'Custom · key' : 'Ollama · local'}
                 </span>
               </div>
               <div className="settings-kv">

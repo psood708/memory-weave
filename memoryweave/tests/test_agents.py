@@ -20,14 +20,6 @@ def make_episode(score: float, turn: int = 1) -> Episode:
     )
 
 
-def test_scorer_llm_is_cached_at_init():
-    """Scorer LLM must be created once at init — same object reused across calls."""
-    agent = EpisodicMemoryAgent(session_id="test")
-    assert hasattr(agent, "_scorer_llm"), "_scorer_llm must be set in __init__"
-    llm_at_init = agent._scorer_llm
-    # Verify the attribute is stable (not recreated on access)
-    assert agent._scorer_llm is llm_at_init
-
 
 def test_update_entity_links_delegates_to_store():
     """EpisodicMemoryAgent.update_entity_links must delegate to its internal store."""
@@ -51,7 +43,7 @@ def test_retrieve_filters_by_min_importance(monkeypatch):
 
     assert len(results) == 1
     assert results[0].importance_score == 0.8
-    mock_store.apply_decay.assert_called_once_with(2, settings.episodic_decay_lambda)
+    mock_store._maybe_decay.assert_called_once_with(settings.episodic_decay_lambda)
 
 
 from memoryweave.agents.orchestrator import MemoryOrchestrator

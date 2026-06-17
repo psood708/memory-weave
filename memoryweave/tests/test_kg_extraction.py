@@ -12,7 +12,7 @@ def agent(tmp_path):
     return KGAgent(store=store)
 
 
-def test_fused_extract_returns_entities(agent):
+def test_fused_extract_returns_entities(agent, require_ollama):
     turn = (
         "User: My name is Parth and I'm building MemoryWeave using LangGraph.\n"
         "Assistant: That sounds great, Parth!"
@@ -22,7 +22,7 @@ def test_fused_extract_returns_entities(agent):
     assert any("parth" in n for n in names), f"Expected 'Parth' in {names}"
 
 
-def test_fused_extract_returns_relationships(agent):
+def test_fused_extract_returns_relationships(agent, require_ollama):
     turn = (
         "User: I'm building MemoryWeave and it uses LangGraph.\n"
         "Assistant: Got it!"
@@ -37,7 +37,7 @@ def test_fused_extract_fails_gracefully_on_empty(agent):
     assert result.relationships == []
 
 
-def test_update_graph_sync_populates_graph(agent):
+def test_update_graph_sync_populates_graph(agent, require_ollama):
     turn = (
         "User: I prefer writing terse code without comments.\n"
         "Assistant: Noted!"

@@ -532,7 +532,7 @@ export default function GraphPanel({
   );
 
   // ── Export menu ───────────────────────────────────────────────────────────
-  const renderExportMenu = () => (
+  const renderExportMenu = (openDown = false) => (
     <div className="gc-settings-wrap" onClick={e => e.stopPropagation()}>
       <button
         className="icon-btn"
@@ -542,7 +542,10 @@ export default function GraphPanel({
         <Icon name="cog" size={13} />
       </button>
       {showExport && (
-        <div className="gc-export-popup">
+        <div
+          className="gc-export-popup"
+          style={openDown ? { bottom: 'auto', top: 'calc(100% + 6px)' } : undefined}
+        >
           <button className="gc-export-item" onClick={() => { if (svgRef.current) exportSVG(svgRef.current); setShowExport(false); }}>
             <Icon name="graph" size={13} /> Export SVG
           </button>
@@ -581,7 +584,7 @@ export default function GraphPanel({
               <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Filter nodes…" />
             </div>
             <div className="gfs-spacer" />
-            {renderExportMenu()}
+            {renderExportMenu(true)}
             <button className="icon-btn" onClick={resetView} data-tooltip="Reset view"><Icon name="focus" size={13} /></button>
             <button className="icon-btn" data-tooltip="Exit fullscreen" onClick={() => setFullscreen(false)}><Icon name="close" size={14} /></button>
           </div>
@@ -679,7 +682,7 @@ export default function GraphPanel({
       <div className="panel-head">
         <span className="panel-title">Knowledge Graph</span>
         <div className="panel-actions">
-          {renderExportMenu()}
+          {renderExportMenu(true)}
           <button className="icon-btn" data-tooltip="Fullscreen" onClick={() => setFullscreen(true)}>
             <Icon name="expand" size={13} />
           </button>

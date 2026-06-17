@@ -208,8 +208,6 @@ MEMORY_TURNS = [
 
 
 async def seed_kg(demo_session_id: str, provider: str, user_id: str = "") -> None:
-    from memoryweave.agents.kg_agent import _kg_path_for_user
-
     class _FakeUserConfig:
         pass
 
@@ -219,7 +217,7 @@ async def seed_kg(demo_session_id: str, provider: str, user_id: str = "") -> Non
         cfg.user_id = user_id  # type: ignore[attr-defined]
         user_config = cfg
 
-    kg_path = _kg_path_for_user(user_id)
+    kg_path = settings.kg_store_path
     if provider == "huggingface":
         label = f"huggingface · {settings.hf_model}"
     else:

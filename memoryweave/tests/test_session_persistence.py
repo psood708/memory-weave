@@ -1,5 +1,7 @@
 """Tests for working memory Redis persistence helpers."""
 import json
+import logging
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
@@ -59,3 +61,72 @@ def test_restore_empty_messages_clears_buffer():
     _restore_working_mem(state, payload)
     assert state.working.get() == []
     assert state.turn_count == 0
+
+
+def test_working_memory_ttl_setting_exists_and_defaults_to_3600():
+    from memoryweave.core.config import settings
+    assert settings.working_memory_ttl == 3600
+
+
+@pytest.mark.asyncio
+async def test_write_turn_redis_failure_does_not_cascade(caplog):
+    """A Redis setex error must log a warning but not prevent KG/episodic writes."""
+    working = WorkingMemoryAgent(max_turns=10)
+    fused_result = MagicMock(importance_score=0.5)
+
+    kg = MagicMock()
+    kg.update_graph = AsyncMock(return_value=[])
+
+    episodic = MagicMock()
+    episodic.write = MagicMock(return_value=None)
+
+    state = SessionState(
+        session_id="test-redis-fail",
+        provider="ollama",
+        graph=object(),
+        working=working,
+        episodic=episodic,
+        kg=kg,
+    )
+    state.user_id = "user1"
+    state.turn_count = 1
+
+    mock_redis = AsyncMock()
+    mock_redis.setex = AsyncMock(side_effect=ConnectionError("Redis down"))
+
+    with patch("memoryweave.db.redis_client.get_redis", return_value=mock_redis), \
+         patch("asyncio.to_thread", AsyncMock(return_value=fused_result)), \
+         caplog.at_level(logging.WARNING, logger="memoryweave.api.session"):
+        await state.write_turn_async("hello", "hi")
+
+    assert any("Redis write failed" in r.message for r in caplog.records)
+    kg.update_graph.assert_called_once()
+    episodic.write.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_session_redis_read_failure_does_not_crash(caplog):
+    """A Redis get error during cold-start must log a warning and return an empty session."""
+    from memoryweave.api.session import get_or_create_session, _sessions
+
+    _sessions.clear()
+
+    mock_redis = AsyncMock()
+    mock_redis.get = AsyncMock(side_effect=ConnectionError("Redis down"))
+    mock_redis.setex = AsyncMock()
+
+    mock_bundle = MagicMock()
+    mock_bundle.graph = object()
+    mock_bundle.working = WorkingMemoryAgent(max_turns=10)
+    mock_bundle.episodic = MagicMock()
+    mock_bundle.kg = MagicMock()
+
+    with patch("memoryweave.db.redis_client.get_redis", return_value=mock_redis), \
+         patch("memoryweave.agents.graph.build_read_graph_with_state", AsyncMock(return_value=mock_bundle)), \
+         caplog.at_level(logging.WARNING, logger="memoryweave.api.session"):
+        state = await get_or_create_session("session-redis-fail", provider="ollama")
+
+    assert state is not None
+    assert state.working.turn_count == 0
+    assert any("Redis read failed" in r.message for r in caplog.records)
+    _sessions.clear()

@@ -46,8 +46,9 @@ def test_weighted_traversal_prefers_stronger_path(tmp_path):
     store.upsert_edge("Root", "Strong", "a", weight=2.0)
     store.upsert_edge("Root", "Weak", "b", weight=0.1)
 
-    nodes = store.traverse(["Root"], max_hops=1, node_budget=1)
-    assert nodes[0][0] == "Strong"
+    nodes = store.traverse(["Root"], max_hops=1, node_budget=2)
+    non_seed = [n for n, _ in nodes if n != "Root"]
+    assert non_seed[0] == "Strong"
 
 
 def test_context_string_includes_relationship_type(tmp_path):
@@ -60,7 +61,7 @@ def test_context_string_includes_relationship_type(tmp_path):
     ctx = store.format_context(nodes)
 
     assert "MemoryWeave" in ctx
-    assert "works_on" in ctx
+    assert "works on" in ctx
 
 
 def test_empty_graph_returns_empty_context(tmp_path):

@@ -12,19 +12,19 @@ def store(tmp_path):
     return EpisodicStore(collection_name=f"test_{uuid.uuid4().hex}", persist_dir=str(tmp_path))
 
 
-def make_episode(store: EpisodicStore, content: str, score: float = 0.8, turn: int = 1) -> Episode:
+def make_episode(store: EpisodicStore, content: str, score: float = 0.8, turn: int = 1, session_id: str = "test-session") -> Episode:
     return Episode(
         id=EpisodicStore.new_id(),
         content=content,
         importance_score=score,
         timestamp=datetime.now(timezone.utc),
-        session_id="test-session",
+        session_id=session_id,
         turn_number=turn,
     )
 
 
 def test_write_and_retrieve(store):
-    ep = make_episode(store, "User discussed the ML pipeline architecture")
+    ep = make_episode(store, "User discussed the ML pipeline architecture", session_id=store.session_id)
     store.write(ep)
     results = store.retrieve("ML pipeline", top_k=3)
     assert len(results) == 1
@@ -32,7 +32,7 @@ def test_write_and_retrieve(store):
 
 
 def test_decay_reduces_score(store):
-    ep = make_episode(store, "Important meeting notes", score=0.9, turn=1)
+    ep = make_episode(store, "Important meeting notes", score=0.9, turn=1, session_id=store.session_id)
     store.write(ep)
     store.apply_decay(current_turn=20, decay_lambda=0.05)
     results = store.retrieve("meeting notes", top_k=3)
@@ -42,14 +42,14 @@ def test_decay_reduces_score(store):
 
 
 def test_decay_prunes_low_score(store):
-    ep = make_episode(store, "Trivial remark", score=0.1, turn=1)
+    ep = make_episode(store, "Trivial remark", score=0.1, turn=1, session_id=store.session_id)
     store.write(ep)
     store.apply_decay(current_turn=50, decay_lambda=0.05)
     assert store.count() == 0
 
 
 def test_entity_link_update(store):
-    ep = make_episode(store, "Alice joined the project")
+    ep = make_episode(store, "Alice joined the project", session_id=store.session_id)
     store.write(ep)
     store.update_entity_links(ep.id, ["entity-alice", "entity-project"])
     results = store.retrieve("Alice project", top_k=3)
@@ -84,7 +84,7 @@ def test_turn_counter_bootstraps_from_persisted_episodes(tmp_path):
     """A new EpisodicStore pointed at existing data must init its counter from stored turn numbers."""
     coll_name = f"test_{uuid.uuid4().hex}"
     store1 = EpisodicStore(collection_name=coll_name, persist_dir=str(tmp_path))
-    ep = make_episode(store1, "Some content", score=0.8, turn=7)
+    ep = make_episode(store1, "Some content", score=0.8, turn=7, session_id=coll_name)
     store1.write(ep)
 
     store2 = EpisodicStore(collection_name=coll_name, persist_dir=str(tmp_path))

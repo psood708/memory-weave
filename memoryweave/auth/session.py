@@ -16,8 +16,6 @@ async def verify_session(
     token = request.cookies.get(_COOKIE_NAME)
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    if not settings.auth_secret:
-        raise HTTPException(status_code=500, detail="Server misconfiguration: AUTH_SECRET not set")
     try:
         payload = jwt.decode(token, settings.auth_secret, algorithms=["HS256"])
     except JWTError:

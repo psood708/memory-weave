@@ -5,6 +5,76 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { signIn } from 'next-auth/react';
 
+/* ── Mobile / tablet warning overlay ───────────────────────────── */
+function MobileWarningOverlay({ onContinue }: { onContinue: () => void }) {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      background: 'rgba(7,9,13,0.93)',
+      backdropFilter: 'blur(16px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '24px',
+      animation: 'backdrop-in 200ms ease-out both',
+    }}>
+      <div style={{
+        background: 'var(--bg-2)',
+        border: '1px solid var(--line-2)',
+        borderRadius: '20px',
+        padding: '40px 28px 32px',
+        maxWidth: '360px', width: '100%',
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        textAlign: 'center',
+        boxShadow: '0 24px 64px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)',
+        animation: 'modal-in 280ms cubic-bezier(.2,.7,.3,1) both',
+      }}>
+        <div style={{
+          width: 56, height: 56, borderRadius: 14,
+          background: 'rgba(167,139,250,0.1)',
+          border: '1px solid rgba(167,139,250,0.2)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          marginBottom: 20,
+        }}>
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2" />
+            <line x1="8" y1="21" x2="16" y2="21" />
+            <line x1="12" y1="17" x2="12" y2="21" />
+          </svg>
+        </div>
+
+        <h2 style={{ font: '600 20px/1.2 var(--font-sans)', color: 'var(--fg-0)', margin: '0 0 10px' }}>
+          Desktop recommended
+        </h2>
+
+        <p style={{ font: '400 13.5px/1.65 var(--font-sans)', color: 'var(--fg-2)', margin: '0 0 28px', maxWidth: '30ch' }}>
+          MemoryWeave has a multi-panel layout with a live knowledge graph, chat interface, and eval dashboard. You&apos;ll get the best experience on a laptop or desktop.
+        </p>
+
+        <button
+          onClick={onContinue}
+          style={{
+            width: '100%', padding: '11px 20px', borderRadius: 10,
+            background: 'rgba(167,139,250,0.12)',
+            border: '1px solid rgba(167,139,250,0.3)',
+            color: '#a78bfa',
+            font: '600 14px/1 var(--font-sans)',
+            cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          }}
+        >
+          Continue anyway
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+          </svg>
+        </button>
+
+        <p style={{ font: '400 11px/1 var(--font-mono)', color: 'var(--fg-4)', marginTop: 14 }}>
+          Won&apos;t show again on this device.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 /* ── Brand mark SVG ─────────────────────────────────────────────── */
 function BrandMark() {
   return (
@@ -336,10 +406,11 @@ function AuthModal({ mode, onClose, onSwitch, onSuccess }: AuthModalProps) {
 }
 
 /* ── Session-aware nav ──────────────────────────────────────────── */
-function Nav({ onSignin, onSignup, onDashboard, isAuthed }: {
+function Nav({ onSignin, onSignup, onDashboard, onDocs, isAuthed }: {
   onSignin: () => void;
   onSignup: () => void;
   onDashboard: () => void;
+  onDocs: () => void;
   isAuthed: boolean;
 }) {
   return (
@@ -351,7 +422,7 @@ function Nav({ onSignin, onSignup, onDashboard, isAuthed }: {
       </button>
       <div className="hn-links">
         <button className="hn-link" onClick={onDashboard}>Dashboard</button>
-        <span className="hn-link" style={{ cursor: 'default', color: 'var(--fg-4)' }}>Docs</span>
+        <button className="hn-link" onClick={onDocs}>Docs</button>
         <span className="hn-link" style={{ cursor: 'default', color: 'var(--fg-4)' }}>API</span>
       </div>
       <div className="hn-actions">
@@ -503,6 +574,20 @@ export default function LandingPage() {
     return null;
   });
 
+  // Mobile / tablet warning — show once per device on narrow screens
+  const [showMobileWarning, setShowMobileWarning] = useState(false);
+
+  useEffect(() => {
+    const isSmall = window.innerWidth < 1024;
+    const dismissed = localStorage.getItem('mw.mobile-warned');
+    if (isSmall && !dismissed) setShowMobileWarning(true);
+  }, []);
+
+  const handleMobileContinue = () => {
+    localStorage.setItem('mw.mobile-warned', '1');
+    setShowMobileWarning(false);
+  };
+
   useEffect(() => {
     const param = searchParams.get('auth');
     if (param === 'signin' || param === 'signup') {
@@ -516,6 +601,7 @@ export default function LandingPage() {
   }, []);
 
   const goToDashboard = () => router.push('/dashboard');
+  const goToDocs = () => router.push('/dashboard?tab=docs');
 
   const handleGetStarted = () => {
     if (isAuthed) {
@@ -535,10 +621,12 @@ export default function LandingPage() {
 
   return (
     <div style={{ background: 'var(--bg-0)', minHeight: '100vh' }}>
+      {showMobileWarning && <MobileWarningOverlay onContinue={handleMobileContinue} />}
       <Nav
         onSignin={handleSignin}
         onSignup={handleGetStarted}
         onDashboard={goToDashboard}
+        onDocs={goToDocs}
         isAuthed={isAuthed}
       />
       <Hero

@@ -55,7 +55,7 @@ importance_score rules:
 entity/relationship rules:
 - Only types: Person, Project, Preference, Fact, Organization, Event
 - Event: use for meetings, deadlines, launches, demos, decisions, milestones, or any time-bound occurrence
-- rel_type: works_on, prefers, knows, part_of, uses, has, related_to, scheduled_for, decided_at, attended
+- rel_type: works_at, works_on, lives_in, prefers, knows, part_of, uses, has, related_to, scheduled_for, decided_at, attended
 - source and target must be names from the entities list above
 - If no entities found, use empty lists
 
@@ -70,6 +70,12 @@ _STOPWORDS: frozenset[str] = frozenset({
     "show", "find", "help", "said", "each", "time", "very", "many", "name",
     "such", "only", "even", "those", "other", "same", "using", "list", "kind",
     "type", "sort", "thing", "things", "something", "anything", "nothing",
+})
+
+_SINGLE_VALUED_RELS: frozenset[str] = frozenset({
+    "works_at", "employed_by", "lives_in", "resides_in", "located_in",
+    "born_in", "married_to", "role_at", "graduated_from", "reports_to",
+    "managed_by",
 })
 
 _TYPE_COERCE: dict[str, str] = {
@@ -133,6 +139,24 @@ class KGAgent:
             store = KnowledgeGraphStore(backend=backend, user_id=user_id)
         self._store = store
         self._extraction_llm = get_extraction_llm(provider=provider, user_config=user_config)
+
+    def _find_conflicts(self, rel: Relationship) -> list[tuple[str, str]]:
+        """Return all (src, tgt) active edges that this rel would supersede.
+
+        Only fires for single-valued relationship types. Skips edges already
+        pointing at the new target (same-fact re-insertion stays idempotent).
+        """
+        if rel.rel_type not in _SINGLE_VALUED_RELS:
+            return []
+        return [
+            (rel.source, tgt)
+            for _, tgt, data in self._store._graph.out_edges(rel.source, data=True)
+            if (
+                data.get("rel_type") == rel.rel_type
+                and data.get("is_active", 1)
+                and tgt != rel.target
+            )
+        ]
 
     def fused_extract(self, text: str) -> FusedResult:
         """Single LLM call: returns importance score + entities + relationships."""
@@ -215,6 +239,8 @@ class KGAgent:
         for rel in fused.relationships:
             if (self._store._graph.has_node(rel.source)
                     and self._store._graph.has_node(rel.target)):
+                for old_src, old_tgt in self._find_conflicts(rel):
+                    self._store._soft_supersede(old_src, old_tgt, rel.source, rel.target)
                 self._store.upsert_edge(rel.source, rel.target, rel.rel_type, rel.weight)
         return [e.name for e in fused.entities]
 

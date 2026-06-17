@@ -24,6 +24,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
     encode: async ({ token, secret }) => {
       return new SignJWT(token as Record<string, unknown>)
         .setProtectedHeader({ alg: "HS256" })
+        .setExpirationTime("30d")
         .sign(secretKey(secret as string));
     },
     decode: async ({ token, secret }) => {

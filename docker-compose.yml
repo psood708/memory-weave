@@ -17,7 +17,7 @@ services:
     restart: unless-stopped
 
   chroma:
-    image: chromadb/chroma:latest
+    image: chromadb/chroma:1.5.9
     volumes:
       - chroma_data:/chroma/chroma
     ports:

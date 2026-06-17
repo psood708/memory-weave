@@ -23,14 +23,17 @@ class ChromaEpisodicBackend:
     def upsert(self, ids: list[str], documents: list[str], metadatas: list[dict]) -> None:
         self._col.upsert(ids=ids, documents=documents, metadatas=metadatas)
 
-    def query(self, query_text: str, n_results: int) -> list[tuple[str, str, dict]]:
+    def query(self, query_text: str, n_results: int, where: dict | None = None) -> list[tuple[str, str, dict]]:
         if self._col.count() == 0:
             return []
-        results = self._col.query(
-            query_texts=[query_text],
-            n_results=min(n_results, self._col.count()),
-            include=["documents", "metadatas"],
-        )
+        kwargs: dict = {
+            "query_texts": [query_text],
+            "n_results": min(n_results, self._col.count()),
+            "include": ["documents", "metadatas"],
+        }
+        if where:
+            kwargs["where"] = where
+        results = self._col.query(**kwargs)
         return list(zip(results["ids"][0], results["documents"][0], results["metadatas"][0]))
 
     def get_all(self) -> list[tuple[str, str, dict]]:
@@ -63,48 +66,98 @@ class ChromaEpisodicBackend:
 
 class QdrantEpisodicBackend:
     _COLLECTION = "episodes"
+    _FASTEMBED_MODEL = "BAAI/bge-small-en-v1.5"
+    _VECTOR_NAME = "fast-bge-small-en"
+    _VECTOR_SIZE = 384
 
     def __init__(self, session_id: str, client=None):
         from memoryweave.core.config import settings as _s
 
         if client is not None:
             self._client = client
+            self._is_server = False
         elif _s.qdrant_url:
             from qdrant_client import QdrantClient
             self._client = QdrantClient(url=_s.qdrant_url, api_key=_s.qdrant_api_key or None)
+            self._is_server = True
         else:
             from qdrant_client import QdrantClient
             self._client = QdrantClient(path=".qdrant")
+            self._is_server = False
         self._session_id = session_id
+        self._ensure_collection()
+        if self._is_server:
+            self._ensure_payload_index()
+
+    def _ensure_collection(self) -> None:
+        from qdrant_client.models import Distance, VectorParams
+        try:
+            self._client.get_collection(self._COLLECTION)
+            return
+        except Exception:
+            pass
+        try:
+            self._client.create_collection(
+                collection_name=self._COLLECTION,
+                vectors_config={self._VECTOR_NAME: VectorParams(size=self._VECTOR_SIZE, distance=Distance.COSINE)},
+            )
+        except Exception:
+            pass  # already created by a concurrent caller
+
+    def _ensure_payload_index(self) -> None:
+        from qdrant_client.models import PayloadSchemaType
+        for field_name, schema in [
+            ("session_id", PayloadSchemaType.KEYWORD),
+            ("is_active", PayloadSchemaType.INTEGER),
+        ]:
+            try:
+                self._client.create_payload_index(
+                    collection_name=self._COLLECTION,
+                    field_name=field_name,
+                    field_schema=schema,
+                )
+            except Exception:
+                pass
 
     def _filter(self):
         from qdrant_client.models import FieldCondition, Filter, MatchValue
         return Filter(must=[FieldCondition(key="session_id", match=MatchValue(value=self._session_id))])
 
     def upsert(self, ids: list[str], documents: list[str], metadatas: list[dict]) -> None:
-        self._client.add(
+        from qdrant_client.models import Document, PointStruct
+        self._client.upsert(
             collection_name=self._COLLECTION,
-            documents=documents,
-            metadata=metadatas,
-            ids=ids,
+            points=[
+                PointStruct(
+                    id=point_id,
+                    vector={self._VECTOR_NAME: Document(text=doc, model=self._FASTEMBED_MODEL)},
+                    payload={**meta, "document": doc},
+                )
+                for point_id, doc, meta in zip(ids, documents, metadatas)
+            ],
         )
 
-    def query(self, query_text: str, n_results: int) -> list[tuple[str, str, dict]]:
-        # client.query() returns QueryResponse with .document / .metadata (not .payload)
+    def query(self, query_text: str, n_results: int, where: dict | None = None) -> list[tuple[str, str, dict]]:
+        from qdrant_client.models import Document, FieldCondition, Filter, MatchValue
+        conditions = [FieldCondition(key="session_id", match=MatchValue(value=self._session_id))]
+        if where and "is_active" in where:
+            conditions.append(FieldCondition(key="is_active", match=MatchValue(value=int(where["is_active"]))))
         try:
-            results = self._client.query(
+            response = self._client.query_points(
                 collection_name=self._COLLECTION,
-                query_text=query_text,
-                query_filter=self._filter(),
+                query=Document(text=query_text, model=self._FASTEMBED_MODEL),
+                using=self._VECTOR_NAME,
+                query_filter=Filter(must=conditions),
                 limit=n_results,
             )
+            results = response.points
         except Exception:
             return []
         out = []
         for r in results:
-            doc = (r.document or "") if hasattr(r, "document") else ""
-            raw_meta = (r.metadata or {}) if hasattr(r, "metadata") else {}
-            meta = {k: v for k, v in raw_meta.items() if k != "document"}
+            payload = r.payload or {}
+            doc = payload.get("document", "")
+            meta = {k: v for k, v in payload.items() if k != "document"}
             out.append((str(r.id), doc, meta))
         return out
 
