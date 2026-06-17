@@ -2,8 +2,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
+import { signOut } from 'next-auth/react';
 import { BrandMark } from './Icon';
 import type { Provider } from '@/lib/api';
+
+interface UserInfo {
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+}
 
 const PROVIDER_LABEL: Record<Provider, string> = {
   ollama: 'ollama·local',
@@ -66,7 +73,7 @@ async function pingOllama(): Promise<boolean> {
 }
 
 export default function Topbar({
-  tab, onTab, provider, onProvider, chatModel, configuredProvider,
+  tab, onTab, provider, onProvider, chatModel, configuredProvider, user,
 }: {
   tab: 'conversation' | 'evals' | 'docs' | 'files';
   onTab: (t: 'conversation' | 'evals' | 'docs' | 'files') => void;
@@ -74,14 +81,18 @@ export default function Topbar({
   onProvider: (p: Provider) => void;
   chatModel?: string;
   configuredProvider?: Provider | null;
+  user?: UserInfo | null;
 }) {
   const [warning, setWarning] = useState<Provider | null>(null);
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus>('checking');
   const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileRect, setProfileRect] = useState<DOMRect | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const anchorRef = useRef<HTMLDivElement | null>(null);
+  const profileRef = useRef<HTMLButtonElement | null>(null);
 
   // Needed to safely use createPortal (avoid SSR mismatch)
   useEffect(() => { setMounted(true); }, []);
@@ -120,6 +131,26 @@ export default function Topbar({
 
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
 
+  useEffect(() => {
+    if (!profileOpen) return;
+    const close = (e: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setProfileOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [profileOpen]);
+
+  const handleProfileClick = () => {
+    if (profileRef.current) setProfileRect(profileRef.current.getBoundingClientRect());
+    setProfileOpen(o => !o);
+  };
+
+  const initials = user?.name
+    ? user.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
+    : '?';
+
   const warn = warning ? PROVIDER_WARNING[warning] : null;
 
   const liveStatus: LiveStatus = (() => {
@@ -133,6 +164,63 @@ export default function Topbar({
     return 'no-key';
   })();
   const live = LIVE_CONFIG[liveStatus];
+
+  const profilePortal = mounted && profileOpen && profileRect ? createPortal(
+    <div
+      style={{
+        position: 'fixed',
+        top: profileRect.bottom + 8,
+        right: window.innerWidth - profileRect.right,
+        background: 'rgba(13,17,23,0.97)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: 12,
+        padding: '4px',
+        width: 220,
+        zIndex: 9999,
+        boxShadow: '0 8px 32px rgba(0,0,0,0.55)',
+      }}
+    >
+      <div style={{ padding: '12px 12px 10px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {user?.image ? (
+            <img src={user.image} alt="" width={32} height={32} style={{ borderRadius: '50%', flexShrink: 0 }} />
+          ) : (
+            <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--episodic)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+              {initials}
+            </div>
+          )}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {user?.name ?? 'User'}
+            </div>
+            <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {user?.email ?? ''}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style={{ padding: '4px' }}>
+        <button
+          onClick={() => signOut({ callbackUrl: '/' })}
+          style={{
+            width: '100%', textAlign: 'left', background: 'none', border: 'none',
+            color: 'rgba(255,255,255,0.55)', fontSize: 13, cursor: 'pointer',
+            padding: '8px 10px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8,
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(248,113,113,0.1)', e.currentTarget.style.color = '#f87171')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'none', e.currentTarget.style.color = 'rgba(255,255,255,0.55)')}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          Sign out
+        </button>
+      </div>
+    </div>,
+    document.body,
+  ) : null;
 
   // Portal — renders outside topbar's stacking context so it truly floats above everything
   const warningPortal = mounted && warn && anchorRect ? createPortal(
@@ -270,8 +358,27 @@ export default function Topbar({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
         </Link>
+        <button
+          ref={profileRef}
+          onClick={handleProfileClick}
+          title={user?.name ?? 'Profile'}
+          style={{
+            width: 30, height: 30, borderRadius: '50%', border: profileOpen ? '2px solid var(--episodic)' : '2px solid rgba(255,255,255,0.12)',
+            background: 'none', cursor: 'pointer', padding: 0, overflow: 'hidden',
+            flexShrink: 0, transition: 'border-color 150ms',
+          }}
+        >
+          {user?.image ? (
+            <img src={user.image} alt={user.name ?? 'Profile'} width={30} height={30} style={{ display: 'block', borderRadius: '50%' }} />
+          ) : (
+            <div style={{ width: 30, height: 30, background: 'var(--episodic)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff' }}>
+              {initials}
+            </div>
+          )}
+        </button>
       </div>
       {warningPortal}
+      {profilePortal}
     </div>
   );
 }
