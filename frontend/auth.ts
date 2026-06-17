@@ -8,6 +8,11 @@ function secretKey(secret: string | Uint8Array) {
   return typeof secret === "string" ? new TextEncoder().encode(secret) : secret;
 }
 
+// In production the frontend and API are on different Railway subdomains (cross-origin).
+// SameSite=Lax (Auth.js default) blocks the cookie from being sent cross-site.
+// SameSite=None + Secure allows it; only active on HTTPS so local dev is unaffected.
+const isProd = (process.env.NEXTAUTH_URL ?? "").startsWith("https");
+
 export const { auth, handlers, signIn, signOut } = NextAuth({
   providers: [
     Google({
@@ -20,6 +25,19 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
     }),
   ],
   secret: process.env.AUTH_SECRET,
+  ...(isProd && {
+    cookies: {
+      sessionToken: {
+        name: "__Secure-authjs.session-token",
+        options: {
+          httpOnly: true,
+          sameSite: "none" as const,
+          path: "/",
+          secure: true,
+        },
+      },
+    },
+  }),
   jwt: {
     encode: async ({ token, secret }) => {
       return new SignJWT(token as Record<string, unknown>)
