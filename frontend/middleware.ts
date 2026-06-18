@@ -13,8 +13,8 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/", nextUrl));
   }
 
-  // Home page is public — the landing page and auth modal live here
-  if (pathname === "/") return NextResponse.next();
+  // Home page and docs are public
+  if (pathname === "/" || pathname.startsWith("/docs")) return NextResponse.next();
 
   // All other routes (/dashboard, /setup, etc.) require a session
   if (!session) {
