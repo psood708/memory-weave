@@ -95,7 +95,8 @@ class RetrievalEvalWorker:
                 context=context[:3000],
                 answer=event.answer[:1500],
             )
-            raw = extract_text(self._llm.invoke([HumanMessage(content=prompt)]).content)
+            msg = await self._llm.ainvoke([HumanMessage(content=prompt)])
+            raw = extract_text(msg.content)
             cleaned = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
             match = re.search(r"\{.*\}", cleaned, re.DOTALL)
             if match:
@@ -104,12 +105,16 @@ class RetrievalEvalWorker:
                 faithfulness = float(max(0.0, min(1.0, data.get("faithfulness", 0))))
                 answer_relevance = float(max(0.0, min(1.0, data.get("answer_relevance", 0))))
                 reasoning = data.get("reasoning", "")
-        except Exception as e:
-            logger.warning(
-                "RetrievalEvalWorker LLM eval failed [session=%s turn=%s]: %s",
+            else:
+                logger.warning(
+                    "RetrievalEvalWorker: no JSON found in LLM response [session=%s turn=%s] raw=%r",
+                    event.session_id, event.turn_number, raw[:200],
+                )
+        except Exception:
+            logger.exception(
+                "RetrievalEvalWorker LLM eval failed [session=%s turn=%s]",
                 getattr(event, "session_id", "?"),
                 getattr(event, "turn_number", "?"),
-                e,
             )
 
         try:
@@ -125,12 +130,11 @@ class RetrievalEvalWorker:
                 answer_relevance=answer_relevance,
                 reasoning=reasoning,
             )
-        except Exception as e:
-            logger.warning(
-                "RetrievalEvalWorker DB write failed [session=%s turn=%s]: %s",
+        except Exception:
+            logger.exception(
+                "RetrievalEvalWorker DB write failed [session=%s turn=%s]",
                 getattr(event, "session_id", "?"),
                 getattr(event, "turn_number", "?"),
-                e,
             )
 
     async def write_structural(self, turn_metric_id: str, event: TurnEvent) -> None:
@@ -144,12 +148,11 @@ class RetrievalEvalWorker:
                 episode_count=len(event.episode_texts),
                 kg_node_count=0,
             )
-        except Exception as e:
-            logger.warning(
-                "RetrievalEvalWorker DB write failed [session=%s turn=%s]: %s",
+        except Exception:
+            logger.exception(
+                "RetrievalEvalWorker DB write failed [session=%s turn=%s]",
                 getattr(event, "session_id", "?"),
                 getattr(event, "turn_number", "?"),
-                e,
             )
 
     async def _write(

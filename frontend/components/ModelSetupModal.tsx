@@ -117,7 +117,7 @@ export default function ModelSetupModal() {
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  const apiUrl = '/proxy';
   const selectedProvider = PROVIDERS.find((p) => p.id === provider)!;
   const needsKey = provider !== "ollama";
 

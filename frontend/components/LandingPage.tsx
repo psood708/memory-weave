@@ -600,7 +600,13 @@ export default function LandingPage() {
     return () => document.body.classList.remove('home-page');
   }, []);
 
-  const goToDashboard = () => router.push('/dashboard');
+  const goToDashboard = () => {
+    if (isAuthed) {
+      router.push('/dashboard');
+    } else {
+      setAuth('signin');
+    }
+  };
   const goToDocs = () => router.push('/dashboard?tab=docs');
 
   const handleGetStarted = () => {
