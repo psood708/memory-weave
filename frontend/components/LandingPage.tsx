@@ -607,7 +607,7 @@ export default function LandingPage() {
       setAuth('signin');
     }
   };
-  const goToDocs = () => router.push('/dashboard?tab=docs');
+  const goToDocs = () => router.push('/docs');
 
   const handleGetStarted = () => {
     if (isAuthed) {
