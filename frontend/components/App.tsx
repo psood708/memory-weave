@@ -142,22 +142,30 @@ export default function App(props: { initialTab?: Tab }) {
 
   const onUploadSuccess = useCallback(() => markStepDone(2), [markStepDone]);
 
-  // Seed provider + chat model from saved user config on mount
-  useEffect(() => {
-    const apiUrl = '/proxy';
-    const validProviders: Provider[] = ['ollama', 'groq', 'custom'];
-    fetch(`${apiUrl}/api/user/model-config`, { credentials: 'include' })
-      .then(r => r.json())
+  // Seed provider + chat model from saved user config.
+  // Also re-fetches when the tab regains visibility (user returning from /setup).
+  const refreshConfig = useCallback(() => {
+    fetch('/proxy/api/user/model-config', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
       .then(data => {
-        if (data.configured) {
-          const p = validProviders.includes(data.provider) ? data.provider as Provider : 'ollama';
-          setProvider(p);
-          setConfiguredProvider(p);
-          setChatModel(data.chat_model ?? '');
-        }
+        if (!data?.configured) return;
+        // DB stores HuggingFace as "huggingface"; frontend type uses "custom"
+        const normalize = (p: string): Provider =>
+          p === 'huggingface' ? 'custom' : (['ollama', 'groq', 'custom'].includes(p) ? p as Provider : 'ollama');
+        const p = normalize(data.provider);
+        setProvider(p);
+        setConfiguredProvider(p);
+        setChatModel(data.chat_model ?? '');
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    refreshConfig();
+    const onVisible = () => { if (document.visibilityState === 'visible') refreshConfig(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [refreshConfig]);
 
   // Fetch initial memory state on mount or when provider changes
   useEffect(() => {
