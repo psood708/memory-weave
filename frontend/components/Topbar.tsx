@@ -93,6 +93,7 @@ export default function Topbar({
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const anchorRef = useRef<HTMLDivElement | null>(null);
   const profileRef = useRef<HTMLButtonElement | null>(null);
+  const profileDropdownRef = useRef<HTMLDivElement | null>(null);
 
   // Needed to safely use createPortal (avoid SSR mismatch)
   useEffect(() => { setMounted(true); }, []);
@@ -134,9 +135,10 @@ export default function Topbar({
   useEffect(() => {
     if (!profileOpen) return;
     const close = (e: MouseEvent) => {
-      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
-        setProfileOpen(false);
-      }
+      const t = e.target as Node;
+      const insideButton = profileRef.current?.contains(t) ?? false;
+      const insideDropdown = profileDropdownRef.current?.contains(t) ?? false;
+      if (!insideButton && !insideDropdown) setProfileOpen(false);
     };
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
@@ -167,6 +169,7 @@ export default function Topbar({
 
   const profilePortal = mounted && profileOpen && profileRect ? createPortal(
     <div
+      ref={profileDropdownRef}
       style={{
         position: 'fixed',
         top: profileRect.bottom + 8,
