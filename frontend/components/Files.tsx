@@ -38,7 +38,7 @@ export default function Files({
   onToast?: (t: { tier: 'episodic' | 'kg' | 'working'; text: string }) => void;
   onUploadSuccess?: () => void;
 }) {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+  const apiUrl = '/proxy';
   const [files, setFiles] = useState<FileRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);

@@ -252,7 +252,7 @@ function Composer({
     e.target.value = '';
     setUploading(true);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+      const apiUrl = '/proxy';
       const form = new FormData();
       form.append('file', file);
       form.append('session_id', sessionId);

@@ -144,7 +144,7 @@ export default function App(props: { initialTab?: Tab }) {
 
   // Seed provider + chat model from saved user config on mount
   useEffect(() => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+    const apiUrl = '/proxy';
     const validProviders: Provider[] = ['ollama', 'groq', 'custom'];
     fetch(`${apiUrl}/api/user/model-config`, { credentials: 'include' })
       .then(r => r.json())
@@ -252,7 +252,7 @@ export default function App(props: { initialTab?: Tab }) {
       className={`app${showOnboarding ? ' onboarding-active' : ''}`}
       style={{ ['--left-w' as any]: leftW + 'px', ['--right-w' as any]: rightW + 'px' }}
     >
-      <Topbar tab={tab} onTab={setTab} provider={provider} onProvider={(p: Provider) => setProvider(p)} chatModel={chatModel} configuredProvider={configuredProvider} />
+      <Topbar tab={tab} onTab={setTab} provider={provider} onProvider={(p: Provider) => setProvider(p)} chatModel={chatModel} configuredProvider={configuredProvider} user={session?.user} />
       {showOnboarding && <OnboardingBanner completedSteps={completedSteps} />}
       {tab === 'conversation' ? (
         <div className="main conv-main">

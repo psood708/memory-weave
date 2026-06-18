@@ -5,6 +5,11 @@ import SessionProvider from "@/components/SessionProvider";
 export const metadata: Metadata = {
   title: "MemoryWeave — Dashboard",
   description: "A long-running conversational agent with three-tier biologically-inspired memory.",
+  icons: {
+    icon: '/icon.svg',
+    shortcut: '/icon.svg',
+    apple: '/icon.svg',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
