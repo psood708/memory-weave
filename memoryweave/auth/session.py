@@ -1,3 +1,5 @@
+import logging
+
 import asyncpg
 from fastapi import Depends, HTTPException, Request
 from jose import JWTError, jwt
@@ -5,6 +7,8 @@ from jose import JWTError, jwt
 from memoryweave.auth.models import UserSession
 from memoryweave.core.config import settings
 from memoryweave.db.database import get_db, new_uuid
+
+logger = logging.getLogger(__name__)
 
 _COOKIE_NAME = "authjs.session-token"
 _SECURE_COOKIE_NAME = "__Secure-authjs.session-token"  # Auth.js uses this prefix on HTTPS
@@ -14,12 +18,20 @@ async def verify_session(
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
 ) -> UserSession:
+    all_cookies = list(request.cookies.keys())
     token = request.cookies.get(_SECURE_COOKIE_NAME) or request.cookies.get(_COOKIE_NAME)
+
     if not token:
+        logger.warning("verify_session: no session cookie — cookies present: %s", all_cookies)
         raise HTTPException(status_code=401, detail="Not authenticated")
+
     try:
         payload = jwt.decode(token, settings.auth_secret, algorithms=["HS256"])
-    except JWTError:
+    except JWTError as exc:
+        logger.warning(
+            "verify_session: JWT decode failed (secret len=%d) — %s",
+            len(settings.auth_secret), exc,
+        )
         raise HTTPException(status_code=401, detail="Invalid session token")
 
     google_sub: str = payload.get("sub", "")
