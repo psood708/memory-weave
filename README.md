@@ -10,6 +10,53 @@ Built as a portfolio-grade end-to-end applied AI system demonstrating context en
 
 ## Architecture
 
+### System Overview
+
+A request fans out in parallel to three memory tiers, merges under a token budget, the LLM answers and streams back, and a fire-and-forget background task writes new memory. All state persists in a horizontally scalable store layer.
+
+```mermaid
+flowchart TD
+    client["Client / UI"]
+    api["FastAPI · LangGraph<br/>read path (SSE)"]
+    client --> api
+
+    api --> wm["Working memory<br/>last 10 turns · deque"]
+    api --> ep["Episodic memory<br/>vectors · top-5 · decay"]
+    api --> kg["Knowledge graph<br/>NetworkX · Hebbian"]
+
+    wm --> merge["Merge + budget<br/>trim to 2000 tokens"]
+    ep --> merge
+    kg --> merge
+
+    merge --> llm["LLM response<br/>Groq · Ollama · HF"]
+    llm --> resp["Response<br/>stream to UI"]
+    llm -. "fire-and-forget" .-> write["Async write<br/>extract + score<br/>→ episodic + graph"]
+
+    subgraph persistence["Persistence — scales horizontally"]
+        direction LR
+        pg["Postgres<br/>KG · metrics · config"]
+        qd["Qdrant / Chroma<br/>episodic vectors"]
+        rd["Redis<br/>session cache"]
+    end
+
+    write -.-> persistence
+
+    classDef structural fill:#444441,stroke:#2C2C2A,color:#fff;
+    classDef tier fill:#0F6E56,stroke:#085041,color:#fff;
+    classDef pipeline fill:#534AB7,stroke:#3C3489,color:#fff;
+    classDef awrite fill:#993C1D,stroke:#712B13,color:#fff;
+    classDef store fill:#854F0B,stroke:#633806,color:#fff;
+
+    class client,api,resp structural;
+    class wm,ep,kg tier;
+    class merge,llm pipeline;
+    class write awrite;
+    class pg,qd,rd store;
+    style persistence fill:none,stroke:#888,stroke-dasharray:5 3;
+```
+
+> Solid arrows are the synchronous read path (everything the user waits on); the dashed branch is the async write, fired *after* the response streams so a disconnect can't block or corrupt persistence.
+
 ### Three-Tier Memory System
 
 ```
